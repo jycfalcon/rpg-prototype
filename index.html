@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>RPG Prototype</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0a14; overflow: hidden; touch-action: none; }
+  canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; touch-action: none; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+'use strict';
+
+const c = document.getElementById('c');
+const ctx = c.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+c.style.cursor = 'crosshair';
+
+c.width  = window.innerWidth;
+c.height = window.innerHeight;
+let canvasRect = c.getBoundingClientRect();
+
+window.addEventListener('resize', () => {
+  c.width  = window.innerWidth;
+  c.height = window.innerHeight;
+  canvasRect = c.getBoundingClientRect();
+});
+
+// ── CONSTANTS ─────────────────────────────────────────────────────────────
+const W = 2400, H = 2400;
+const P_SPEED  = 160;
+const P_HP     = 100;
+const P_ATK    = 5;
+const P_REGEN  = 1;
+const ATK_RANGE    = 70;
+const ATK_CONE     = Math.PI * 0.75;
+const ATK_DURATION = 0.22;
+const ATK_CD       = 0.45;
+const SPAWN_INTERVAL = 20;
+const MAX_SLIMES   = 5;
+const S_HP  = 10, S_ATK = 1, S_SPEED = 46;
+
+// ── STATE ──────────────────────────────────────────────────────────────────
+let cam  = { x: W/2 - c.width/2,  y: H/2 - c.height/2 };
+let keys = {};
+
+let player = {
+  x: W/2, y: H/2,
+  hp: P_HP, regen: 0,
+  facing: 'down',
+  atkCd: 0, atkTimer: 0, atkAngle: 0,
+  flash: 0, dead: false
+};
+
+let slimes = [], particles = [], floaters = [];
+let spawnT = 10;
+
+// ── TOUCH STATE ────────────────────────────────────────────────────────────
+let isTouchDevice = false;
+
+const joy = {
+  active: false, id: -1,
+  bx: 0, by: 0,   // base center (where thumb landed)
+  kx: 0, ky: 0,   // knob position (clamped)
+  dx: 0, dy: 0,   // normalised direction
+  R: 58,           // outer ring radius
+  r: 24            // knob radius
+};
+
+let atkBtnFlash = 0;
+
+function getAtkBtn() {
+  // Sits above the minimap, right side
+  return { x: c.width - 70, y: c.height - 210, r: 46 };
+}
+
+// ── SHARED ATTACK ──────────────────────────────────────────────────────────
+function triggerAttack(angle) {
+  if (player.dead || player.atkCd > 0) return;
+
+  player.atkAngle = angle;
+  player.atkTimer = ATK_DURATION;
+  player.atkCd    = ATK_CD;
+
+  const a = angle;
+  if      (Math.abs(a) < Math.PI * 0.25) player.facing = 'right';
+  else if (Math.abs(a) > Math.PI * 0.75) player.facing = 'left';
+  else                                    player.facing  = a < 0 ? 'up' : 'down';
+
+  for (const s of slimes) {
+    if (!s.alive) continue;
+    const dx = s.x - player.x, dy = s.y - player.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist > ATK_RANGE + s.r) continue;
+    let diff = Math.atan2(dy, dx) - angle;
+    while (diff >  Math.PI) diff -= 2 * Math.PI;
+    while (diff < -Math.PI) diff += 2 * Math.PI;
+    if (Math.abs(diff) > ATK_CONE / 2) continue;
+
+    s.hp   -= P_ATK;
+    s.flash = 0.15;
+    s.kbx   = Math.cos(angle) * 190;
+    s.kby   = Math.sin(angle) * 190;
+    addFloat(s.x, s.y - s.r, `-${P_ATK}`, '#ff8888', 13);
+    burst(s.x, s.y, '#5bff8a', 5);
+    if (s.hp <= 0) {
+      s.alive = false;
+      burst(s.x, s.y, '#27ae60', 14);
+      addFloat(s.x, s.y - 28, 'SLAY!', '#f1c40f', 14);
+    }
+  }
+}
+
+// Mobile attack: aim in joystick direction if active, else facing direction
+function triggerMobileAttack() {
+  atkBtnFlash = 0.18;
+  const facingAngle = { right: 0, left: Math.PI, up: -Math.PI/2, down: Math.PI/2 }[player.facing];
+  const joyLen = Math.hypot(joy.dx, joy.dy);
+  const angle  = (joy.active && joyLen > 0.15)
+    ? Math.atan2(joy.dy, joy.dx)
+    : facingAngle;
+  triggerAttack(angle);
+}
+
+// ── INPUT — KEYBOARD ───────────────────────────────────────────────────────
+window.addEventListener('keydown', e => {
+  keys[e.key.toLowerCase()] = true;
+  if (['arrowup','arrowdown','arrowleft','arrowright',' '].includes(e.key.toLowerCase()))
+    e.preventDefault();
+});
+window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
+
+// ── INPUT — MOUSE (desktop) ────────────────────────────────────────────────
+c.addEventListener('click', e => {
+  if (isTouchDevice) return; // touch devices handle their own clicks
+  const cx = e.clientX - canvasRect.left;
+  const cy = e.clientY - canvasRect.top;
+  triggerAttack(Math.atan2(cy - c.height/2, cx - c.width/2));
+});
+
+// ── INPUT — TOUCH ──────────────────────────────────────────────────────────
+function touchPos(t) {
+  return {
+    x: t.clientX - canvasRect.left,
+    y: t.clientY - canvasRect.top
+  };
+}
+
+c.addEventListener('touchstart', e => {
+  e.preventDefault();
+  isTouchDevice = true;
+  canvasRect = c.getBoundingClientRect(); // refresh on each touch
+
+  for (const t of e.changedTouches) {
+    const { x, y } = touchPos(t);
+    const btn = getAtkBtn();
+
+    // Attack button (right side)
+    if (Math.hypot(x - btn.x, y - btn.y) < btn.r + 16) {
+      triggerMobileAttack();
+      continue;
+    }
+
+    // Left half → joystick
+    if (x < c.width * 0.55 && !joy.active) {
+      joy.active = true;
+      joy.id     = t.identifier;
+      joy.bx = x; joy.by = y;
+      joy.kx = x; joy.ky = y;
+      joy.dx = 0; joy.dy = 0;
+    }
+  }
+}, { passive: false });
+
+c.addEventListener('touchmove', e => {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    if (!joy.active || t.identifier !== joy.id) continue;
+    const { x, y } = touchPos(t);
+    const dx   = x - joy.bx, dy = y - joy.by;
+    const dist = Math.hypot(dx, dy);
+
+    if (dist < 8) {
+      joy.dx = 0; joy.dy = 0;
+      joy.kx = x; joy.ky = y;
+    } else {
+      const clamped = Math.min(dist, joy.R);
+      joy.dx = dx / dist;
+      joy.dy = dy / dist;
+      joy.kx = joy.bx + joy.dx * clamped;
+      joy.ky = joy.by + joy.dy * clamped;
+    }
+  }
+}, { passive: false });
+
+c.addEventListener('touchend', e => {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    if (joy.active && t.identifier === joy.id) {
+      joy.active = false;
+      joy.id     = -1;
+      joy.dx = 0; joy.dy = 0;
+    }
+  }
+}, { passive: false });
+
+c.addEventListener('touchcancel', () => {
+  joy.active = false; joy.id = -1; joy.dx = 0; joy.dy = 0;
+});
+
+// ── HELPERS ────────────────────────────────────────────────────────────────
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const scr   = (wx, wy) => [wx - cam.x, wy - cam.y];
+
+function burst(x, y, color, n) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, spd = 35 + Math.random() * 80;
+    particles.push({ x, y, vx: Math.cos(a)*spd, vy: Math.sin(a)*spd,
+      color, sz: 2+Math.random()*4, life: 0.3+Math.random()*0.4, max: 0.7 });
+  }
+}
+function addFloat(x, y, text, color, size) {
+  floaters.push({ x, y, text, color, size, life: 0.9, max: 0.9, vy: -58 });
+}
+function spawnSlime() {
+  let x, y, tries = 0;
+  do {
+    x = 40 + Math.random() * (W-80);
+    y = 40 + Math.random() * (H-80);
+    tries++;
+  } while (Math.hypot(x-player.x, y-player.y) < 230 && tries < 20);
+  slimes.push({ x, y, r: 14, hp: S_HP, alive: true,
+    atkCd: Math.random(), kbx: 0, kby: 0, flash: 0, animT: Math.random()*Math.PI*2 });
+}
+
+// ── UPDATE ─────────────────────────────────────────────────────────────────
+let last = 0;
+
+function update(dt) {
+  if (player.dead) return;
+
+  // Combined movement: keyboard + joystick
+  let dx = 0, dy = 0;
+  if (keys['w'] || keys['arrowup'])    dy -= 1;
+  if (keys['s'] || keys['arrowdown'])  dy += 1;
+  if (keys['a'] || keys['arrowleft'])  dx -= 1;
+  if (keys['d'] || keys['arrowright']) dx += 1;
+  dx += joy.dx;
+  dy += joy.dy;
+  const mag = Math.hypot(dx, dy);
+  if (mag > 1) { dx /= mag; dy /= mag; }
+
+  player.x = clamp(player.x + dx * P_SPEED * dt, 12, W-12);
+  player.y = clamp(player.y + dy * P_SPEED * dt, 12, H-12);
+
+  if (mag > 0.05) {
+    if (Math.abs(dx) >= Math.abs(dy)) player.facing = dx > 0 ? 'right' : 'left';
+    else                               player.facing = dy > 0 ? 'down'  : 'up';
+  }
+
+  if (player.atkCd   > 0) player.atkCd   -= dt;
+  if (player.atkTimer > 0) player.atkTimer -= dt;
+  if (player.flash    > 0) player.flash    -= dt;
+  if (atkBtnFlash     > 0) atkBtnFlash     -= dt;
+
+  player.regen += dt;
+  if (player.regen >= 1) { player.regen -= 1; player.hp = Math.min(P_HP, player.hp+P_REGEN); }
+
+  cam.x = player.x - c.width  / 2;
+  cam.y = player.y - c.height / 2;
+
+  spawnT -= dt;
+  if (spawnT <= 0) {
+    spawnT = SPAWN_INTERVAL;
+    const alive = slimes.filter(s => s.alive).length;
+    const n = Math.min(MAX_SLIMES - alive, 2 + Math.floor(Math.random()*2));
+    for (let i = 0; i < n; i++) spawnSlime();
+  }
+
+  for (const s of slimes) {
+    if (!s.alive) continue;
+    s.animT += dt;
+    s.flash  = Math.max(0, s.flash - dt);
+    s.kbx   *= Math.pow(0.01, dt);
+    s.kby   *= Math.pow(0.01, dt);
+    const cdx = player.x-s.x, cdy = player.y-s.y, dist = Math.hypot(cdx,cdy);
+    let cvx = 0, cvy = 0;
+    if (dist > s.r+14) { cvx = (cdx/dist)*S_SPEED; cvy = (cdy/dist)*S_SPEED; }
+    s.x = clamp(s.x+(cvx+s.kbx)*dt, s.r, W-s.r);
+    s.y = clamp(s.y+(cvy+s.kby)*dt, s.r, H-s.r);
+    if (dist <= s.r+14) {
+      s.atkCd -= dt;
+      if (s.atkCd <= 0) {
+        s.atkCd = 1;
+        player.hp = Math.max(0, player.hp-S_ATK);
+        player.flash = 0.2;
+        burst(player.x, player.y, '#e74c3c', 4);
+        if (player.hp <= 0) player.dead = true;
+      }
+    }
+  }
+
+  slimes    = slimes.filter(s => s.alive);
+  particles = particles.filter(p => { p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=80*dt; p.life-=dt; return p.life>0; });
+  floaters  = floaters.filter(f => { f.y+=f.vy*dt; f.vy+=22*dt; f.life-=dt; return f.life>0; });
+}
+
+// ── DRAW ───────────────────────────────────────────────────────────────────
+function drawBG() {
+  ctx.fillStyle = '#11111c';
+  ctx.fillRect(0, 0, c.width, c.height);
+  ctx.strokeStyle = 'rgba(255,255,255,0.027)';
+  ctx.lineWidth = 1;
+  const gs = 80;
+  const ox = ((-cam.x%gs)+gs)%gs, oy = ((-cam.y%gs)+gs)%gs;
+  for (let x=ox; x<c.width;  x+=gs) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,c.height); ctx.stroke(); }
+  for (let y=oy; y<c.height; y+=gs) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(c.width,y);  ctx.stroke(); }
+  const [bx,by] = scr(0,0);
+  ctx.save();
+  ctx.strokeStyle = 'rgba(100,130,220,0.5)'; ctx.lineWidth = 2.5;
+  ctx.setLineDash([12,9]); ctx.strokeRect(bx,by,W,H);
+  ctx.setLineDash([]);
+  ctx.strokeStyle = 'rgba(80,110,200,0.1)'; ctx.lineWidth = 28;
+  ctx.strokeRect(bx,by,W,H);
+  ctx.restore();
+}
+
+function drawChar() {
+  const [sx,sy] = scr(player.x, player.y);
+  const p = 2, atk = player.atkTimer > 0;
+  ctx.fillStyle = 'rgba(0,0,0,0.28)';
+  ctx.beginPath(); ctx.ellipse(sx,sy+13,11,5,0,0,Math.PI*2); ctx.fill();
+  if (player.flash > 0) {
+    ctx.save(); ctx.globalAlpha = (player.flash/0.2)*0.45;
+    ctx.fillStyle = '#e74c3c'; ctx.fillRect(sx-14,sy-18,28,34); ctx.restore();
+  }
+  ctx.save(); ctx.translate(sx,sy);
+  const idleAngle = {right:0, left:Math.PI, up:-Math.PI/2, down:Math.PI/2}[player.facing];
+  const sAngle    = atk ? player.atkAngle : idleAngle;
+  const swingOff  = atk ? (1-player.atkTimer/ATK_DURATION)*Math.PI*0.55-Math.PI*0.28 : 0;
+  if (atk) {
+    ctx.save(); ctx.strokeStyle='rgba(180,215,255,0.16)'; ctx.lineWidth=15; ctx.lineCap='round';
+    ctx.beginPath(); ctx.arc(0,0,38,player.atkAngle-ATK_CONE/2,player.atkAngle+ATK_CONE/2); ctx.stroke(); ctx.restore();
+  }
+  const drawSword = () => {
+    ctx.save(); ctx.rotate(sAngle+swingOff);
+    ctx.fillStyle='#7b4c2a'; ctx.fillRect(8,-p,7,p*2);
+    ctx.fillStyle='#b0b0b0'; ctx.fillRect(14,-p*2,p*2,p*4);
+    ctx.fillStyle='#dcdcdc'; ctx.fillRect(16,-p*0.8,22,p*1.6);
+    ctx.fillStyle='rgba(255,255,255,0.65)'; ctx.fillRect(16,-p*0.8,22,p*0.55);
+    ctx.fillStyle='#dcdcdc';
+    ctx.beginPath(); ctx.moveTo(38,-p*0.8); ctx.lineTo(38,p*0.8); ctx.lineTo(44,0); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  };
+  if (player.facing==='up' && !atk) drawSword();
+  ctx.fillStyle='#2a1a0e'; ctx.fillRect(-5*p,6*p,4*p,p); ctx.fillRect(p,6*p,4*p,p);
+  ctx.fillStyle='#4a3020'; ctx.fillRect(-4*p,3*p,3*p,3*p); ctx.fillRect(p,3*p,3*p,3*p);
+  ctx.fillStyle='#5c3a1a'; ctx.fillRect(-4*p,2*p,8*p,p);
+  ctx.fillStyle='#2d5c2d'; ctx.fillRect(-4*p,-p,8*p,3*p);
+  ctx.fillStyle='#c09060'; ctx.fillRect(-6*p,-p,2*p,3*p); ctx.fillRect(4*p,-p,2*p,3*p);
+  ctx.fillStyle='#c09060'; ctx.fillRect(-p,-2*p,2*p,p);
+  ctx.fillStyle='#c09060'; ctx.fillRect(-3*p,-7*p,6*p,5*p);
+  ctx.fillStyle='#2e1a0a'; ctx.fillRect(-3*p,-7*p,6*p,2*p); ctx.fillRect(-4*p,-6*p,p,3*p); ctx.fillRect(3*p,-6*p,p,3*p);
+  if (player.facing!=='up') { ctx.fillStyle='#1a1a2e'; ctx.fillRect(-2*p,-5*p,p,p); ctx.fillRect(p,-5*p,p,p); }
+  if (player.facing!=='up'||atk) drawSword();
+  ctx.restore();
+}
+
+function drawSlime(s) {
+  const [sx,sy] = scr(s.x,s.y);
+  const bob = Math.sin(s.animT*3)*2, sq = 1+Math.sin(s.animT*3)*0.07;
+  ctx.save(); ctx.translate(sx,sy);
+  ctx.fillStyle='rgba(0,0,0,0.28)';
+  ctx.beginPath(); ctx.ellipse(0,s.r+3,s.r*0.65,4,0,0,Math.PI*2); ctx.fill();
+  ctx.translate(0,bob); ctx.scale(sq,2-sq);
+  const hit=s.flash>0, body=hit?'#ff8888':'#27ae60', shine=hit?'#ffcccc':'#5bff8a';
+  ctx.fillStyle=body; ctx.beginPath(); ctx.arc(0,0,s.r,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle=shine; ctx.beginPath(); ctx.arc(-s.r*0.28,-s.r*0.28,s.r*0.38,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#111128';
+  ctx.beginPath(); ctx.arc(-s.r*0.3,-s.r*0.1,3,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc( s.r*0.3,-s.r*0.1,3,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#fff';
+  ctx.beginPath(); ctx.arc(-s.r*0.3+1,-s.r*0.1-1,1.2,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc( s.r*0.3+1,-s.r*0.1-1,1.2,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle='#111128'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.arc(0,s.r*0.12,s.r*0.35,0.2,Math.PI-0.2); ctx.stroke();
+  ctx.restore();
+}
+
+function drawHPBar(wx,wy,hp,max,bw,yOff,isPlayer) {
+  const [sx,sy]=scr(wx,wy), x=sx-bw/2, y=sy+yOff, bh=5;
+  ctx.fillStyle='#111'; ctx.fillRect(x-1,y-1,bw+2,bh+2);
+  const ratio=Math.max(0,hp/max);
+  ctx.fillStyle=isPlayer?(ratio>0.6?'#2ecc40':ratio>0.3?'#f39c12':'#e74c3c'):'#e74c3c';
+  ctx.fillRect(x,y,Math.ceil(bw*ratio),bh);
+  if (isPlayer) {
+    ctx.fillStyle='#fff'; ctx.font='10px monospace'; ctx.textAlign='center';
+    ctx.fillText(`${Math.ceil(hp)}/${max}`,sx,y-3);
+  }
+}
+
+function drawParticles() {
+  for (const p of particles) {
+    const [sx,sy]=scr(p.x,p.y);
+    ctx.globalAlpha=p.life/p.max; ctx.fillStyle=p.color;
+    ctx.fillRect(sx-p.sz/2,sy-p.sz/2,p.sz,p.sz);
+  }
+  ctx.globalAlpha=1;
+}
+
+function drawFloaters() {
+  ctx.textBaseline='middle';
+  for (const f of floaters) {
+    const [sx,sy]=scr(f.x,f.y);
+    ctx.globalAlpha=Math.min(1,f.life/(f.max*0.4));
+    ctx.fillStyle=f.color; ctx.font=`bold ${f.size}px monospace`; ctx.textAlign='center';
+    ctx.fillText(f.text,sx,sy);
+  }
+  ctx.globalAlpha=1; ctx.textBaseline='alphabetic';
+}
+
+function drawMinimap() {
+  const mw=140, mh=140, mx=c.width-mw-12, my=c.height-mh-12, pad=5;
+  ctx.fillStyle='rgba(8,8,18,0.88)'; ctx.fillRect(mx,my,mw,mh);
+  ctx.strokeStyle='#3a4060'; ctx.lineWidth=1; ctx.strokeRect(mx,my,mw,mh);
+  const sx=(mw-pad*2)/W, sy=(mh-pad*2)/H;
+  ctx.strokeStyle='rgba(100,130,220,0.35)'; ctx.lineWidth=1; ctx.strokeRect(mx+pad,my+pad,mw-pad*2,mh-pad*2);
+  ctx.strokeStyle='rgba(255,255,255,0.1)'; ctx.lineWidth=1;
+  ctx.strokeRect(mx+pad+(player.x-c.width/2)*sx, my+pad+(player.y-c.height/2)*sy, c.width*sx, c.height*sy);
+  ctx.fillStyle='#2ecc40';
+  for (const s of slimes) {
+    if (!s.alive) continue;
+    ctx.beginPath(); ctx.arc(mx+pad+s.x*sx,my+pad+s.y*sy,3,0,Math.PI*2); ctx.fill();
+  }
+  const px=mx+pad+player.x*sx, py=my+pad+player.y*sy;
+  ctx.fillStyle='#3498db'; ctx.beginPath(); ctx.arc(px,py,4,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle='#7fc8ff'; ctx.lineWidth=1; ctx.beginPath(); ctx.arc(px,py,4,0,Math.PI*2); ctx.stroke();
+  ctx.fillStyle='#445'; ctx.font='9px monospace'; ctx.textAlign='left'; ctx.fillText('MAP',mx+5,my+12);
+}
+
+function drawHUD() {
+  const bw=175;
+  ctx.fillStyle='rgba(8,8,18,0.82)'; ctx.fillRect(10,10,bw+10,65);
+  ctx.strokeStyle='#2a3050'; ctx.lineWidth=1; ctx.strokeRect(10,10,bw+10,65);
+  ctx.fillStyle='#556'; ctx.font='9px monospace'; ctx.textAlign='left'; ctx.fillText('HERO',15,23);
+  ctx.fillStyle='#1a1a2e'; ctx.fillRect(15,27,bw,18);
+  const hr=Math.max(0,player.hp/P_HP);
+  ctx.fillStyle=hr>0.6?'#2ecc40':hr>0.3?'#f39c12':'#e74c3c';
+  ctx.fillRect(15,27,Math.floor(bw*hr),18);
+  ctx.fillStyle='#fff'; ctx.font='bold 11px monospace'; ctx.textAlign='center';
+  ctx.fillText(`${Math.ceil(player.hp)} / ${P_HP}`,15+bw/2,40);
+  ctx.fillStyle='#3a8a3a'; ctx.font='9px monospace'; ctx.textAlign='left';
+  ctx.fillText(`♥ +${P_REGEN}/s`,15,60);
+  ctx.fillStyle=player.atkCd>0?'#888':'#f1c40f';
+  ctx.fillText(player.atkCd>0?`ATK: ${player.atkCd.toFixed(1)}s`:'ATK: READY',80,60);
+
+  ctx.fillStyle='rgba(8,8,18,0.82)'; ctx.fillRect(10,84,bw+10,28);
+  ctx.strokeStyle='#2a3050'; ctx.lineWidth=1; ctx.strokeRect(10,84,bw+10,28);
+  const alive=slimes.filter(s=>s.alive).length;
+  ctx.fillStyle='#556'; ctx.font='9px monospace'; ctx.textAlign='left';
+  ctx.fillText(`SLIMES: ${alive}/${MAX_SLIMES}   SPAWN: ${Math.ceil(Math.max(0,spawnT))}s`,15,97);
+  ctx.fillStyle='#334'; ctx.fillText(`Slime ${S_HP}hp ${S_ATK}atk   Hero ${P_HP}hp ${P_ATK}atk`,15,107);
+
+  if (!isTouchDevice) {
+    ctx.fillStyle='rgba(8,8,18,0.6)'; ctx.fillRect(10,c.height-44,235,34);
+    ctx.fillStyle='#445'; ctx.font='9px monospace'; ctx.textAlign='left';
+    ctx.fillText('WASD  Move       Left Click  Attack',15,c.height-29);
+    ctx.fillText('Sword swings toward click direction',15,c.height-17);
+  }
+}
+
+function drawTouchControls() {
+  if (!isTouchDevice) return;
+
+  // ── Joystick ──────────────────────────────────────────────
+  if (!joy.active) {
+    // Idle hint: faint ring bottom-left
+    ctx.save();
+    ctx.globalAlpha = 0.13;
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(85, c.height-120, joy.R, 0, Math.PI*2); ctx.stroke();
+    ctx.globalAlpha = 0.16;
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('MOVE', 85, c.height-120);
+    ctx.textBaseline = 'alphabetic';
+    ctx.restore();
+  } else {
+    // Active joystick
+    ctx.save();
+    // Outer ring
+    ctx.globalAlpha = 0.22;
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(joy.bx, joy.by, joy.R, 0, Math.PI*2); ctx.stroke();
+    // Inner fill
+    ctx.globalAlpha = 0.1;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(joy.bx, joy.by, joy.R, 0, Math.PI*2); ctx.fill();
+    // Knob
+    ctx.globalAlpha = 0.55;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(joy.kx, joy.ky, joy.r, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  // ── Attack button ─────────────────────────────────────────
+  const btn = getAtkBtn();
+  const pressed = atkBtnFlash > 0;
+  ctx.save();
+  // Glow ring
+  ctx.globalAlpha = pressed ? 0.55 : 0.22;
+  ctx.strokeStyle = '#f39c12'; ctx.lineWidth = pressed ? 3 : 2;
+  ctx.beginPath(); ctx.arc(btn.x, btn.y, btn.r, 0, Math.PI*2); ctx.stroke();
+  // Fill
+  ctx.globalAlpha = pressed ? 0.35 : 0.12;
+  ctx.fillStyle = '#f39c12';
+  ctx.beginPath(); ctx.arc(btn.x, btn.y, btn.r, 0, Math.PI*2); ctx.fill();
+  // Label
+  ctx.globalAlpha = pressed ? 0.95 : 0.5;
+  ctx.fillStyle = '#fff'; ctx.font = 'bold 13px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('ATK', btn.x, btn.y);
+  ctx.textBaseline = 'alphabetic';
+  ctx.restore();
+}
+
+function drawDead() {
+  ctx.fillStyle='rgba(0,0,0,0.78)'; ctx.fillRect(0,0,c.width,c.height);
+  ctx.fillStyle='#e74c3c'; ctx.font='bold 52px monospace'; ctx.textAlign='center';
+  ctx.fillText('YOU DIED',c.width/2,c.height/2-16);
+  ctx.fillStyle='#666'; ctx.font='18px monospace';
+  ctx.fillText('Refresh to play again',c.width/2,c.height/2+30);
+}
+
+function draw() {
+  drawBG();
+  for (const s of slimes) {
+    if (!s.alive) continue;
+    drawSlime(s);
+    drawHPBar(s.x,s.y,s.hp,S_HP,38,-s.r-12,false);
+  }
+  drawParticles();
+  drawChar();
+  drawHPBar(player.x,player.y,player.hp,P_HP,54,-44,true);
+  drawFloaters();
+  drawHUD();
+  drawMinimap();
+  drawTouchControls();
+  if (player.dead) drawDead();
+}
+
+// ── LOOP ───────────────────────────────────────────────────────────────────
+function loop(ts) {
+  const dt = Math.min((ts-last)/1000, 0.05);
+  last = ts;
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+
+spawnSlime(); spawnSlime();
+requestAnimationFrame(ts => { last=ts; requestAnimationFrame(loop); });
+</script>
+</body>
+</html>
