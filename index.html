@@ -150,10 +150,22 @@
   .tt-name { font-size:11px; color:#e0dff8; margin-bottom:3px; letter-spacing:0.05em; }
   .tt-meta { color:#404080; margin-bottom:4px; font-size:8px; }
   .tt-stat { color:#7090d8; }
+  /* Bag button */
+  #bag-btn {
+    position:fixed; top:10px; right:148px; z-index:200;
+    background:rgba(8,8,18,0.82); border:1px solid #2a3050; border-radius:3px;
+    color:#aaa; font-size:14px; width:32px; height:22px;
+    cursor:pointer; display:flex; align-items:center; justify-content:center;
+    padding:0; transition:border-color 0.15s,color 0.15s; user-select:none;
+    font-family:inherit;
+  }
+  #bag-btn:hover { border-color:#4a5080; color:#eee; }
+  #bag-btn.open  { border-color:#5050b0; color:#a0a0f0; background:rgba(20,20,60,0.9); }
   @media (max-width:768px) {
     .inv-body { flex-direction:column; overflow-y:auto; }
     .inv-left { width:100%; }
     .inv-grid { grid-template-columns:repeat(5,1fr); }
+    #bag-btn  { right:10px; top:38px; width:36px; height:28px; font-size:16px; }
   }
 
   @media (max-width: 768px) {
@@ -236,6 +248,9 @@
 
 <!-- MAP FADE OVERLAY -->
 <div id="map-fade"></div>
+
+<!-- BAG BUTTON — always visible, opens inventory -->
+<button id="bag-btn" onclick="inventoryOpen ? closeInventory() : openInventory()" title="Inventory [B]">🎒</button>
 
 <!-- INVENTORY PANEL -->
 <div id="inventory-panel">
@@ -594,6 +609,21 @@ function triggerInteract(npc) {
 }
 
 // ── INPUT ─────────────────────────────────────────────────────────────────
+// Capture-phase listener — fires BEFORE chat input's stopPropagation
+// so B and Escape always work regardless of focus
+document.addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if (k === 'b') {
+    // Don't intercept if user is typing in an input/textarea
+    if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) return;
+    inventoryOpen ? closeInventory() : openInventory();
+  }
+  if (k === 'escape') {
+    if (inventoryOpen) { closeInventory(); e.preventDefault(); }
+    else { closeWorldMap(); closeStoragePanel(); }
+  }
+}, true); // capture: true = runs before element handlers
+
 window.addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
   if (!keys[k]) {
@@ -1451,9 +1481,9 @@ function closeStoragePanel(){
 // ── INVENTORY ─────────────────────────────────────────────────────────────
 function openInventory() {
   inventoryOpen = true;
-  // Close other panels
   closeWorldMap(); closeStoragePanel();
   document.getElementById('inventory-panel').style.display = 'flex';
+  document.getElementById('bag-btn').classList.add('open');
 
   // Label
   const charClass = rpg_char_class.charAt(0).toUpperCase() + rpg_char_class.slice(1);
@@ -1466,6 +1496,7 @@ function openInventory() {
 function closeInventory() {
   inventoryOpen = false;
   document.getElementById('inventory-panel').style.display = 'none';
+  document.getElementById('bag-btn').classList.remove('open');
   hideTooltip();
 }
 
