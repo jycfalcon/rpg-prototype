@@ -18,117 +18,108 @@
       justify-content: center;
     }
 
-    /* ── SCREENS ─────────────────────────────────────────────── */
     .screen { display: none; }
-    .screen.active { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    .screen.active {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      width: 100%;
+    }
 
     .panel {
       background: #12121f;
       border: 1px solid #2a2a4a;
       padding: 2.5rem 2rem;
-      width: 420px;
+      width: 440px;
       max-width: 95vw;
     }
 
-    /* ── TYPOGRAPHY ──────────────────────────────────────────── */
     .game-title {
-      font-size: 0.7rem;
+      font-size: 0.65rem;
       letter-spacing: 0.25em;
-      color: #5050a0;
+      color: #3838a0;
       margin-bottom: 0.4rem;
     }
 
     h1 {
-      font-size: 1.5rem;
+      font-size: 1.4rem;
       color: #e0dff8;
       font-weight: normal;
-      letter-spacing: 0.1em;
+      letter-spacing: 0.08em;
       margin-bottom: 2rem;
     }
 
     h2 {
-      font-size: 0.75rem;
-      color: #6060a8;
+      font-size: 0.7rem;
+      color: #5050a0;
       letter-spacing: 0.2em;
       margin-bottom: 1.25rem;
-      padding-bottom: 0.6rem;
-      border-bottom: 1px solid #1e1e38;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid #1a1a30;
     }
 
-    /* ── INPUTS ──────────────────────────────────────────────── */
     input, select {
       width: 100%;
       padding: 0.65rem 0.75rem;
       margin-bottom: 0.6rem;
       background: #0a0a14;
-      border: 1px solid #2a2a4a;
+      border: 1px solid #252545;
       color: #c8c8d8;
       font-family: inherit;
       font-size: 0.85rem;
       outline: none;
       transition: border-color 0.15s;
     }
-    input:focus, select:focus { border-color: #5050a0; }
-    input::placeholder { color: #383860; }
+    input:focus, select:focus { border-color: #4040a0; }
+    input::placeholder { color: #303058; }
     select option { background: #0a0a14; }
 
-    /* ── BUTTONS ─────────────────────────────────────────────── */
     .btn {
       width: 100%;
       padding: 0.7rem;
-      background: #3030a8;
+      background: #2828a0;
       color: #ddddf8;
       border: none;
       cursor: pointer;
       font-family: inherit;
-      font-size: 0.8rem;
-      letter-spacing: 0.15em;
+      font-size: 0.78rem;
+      letter-spacing: 0.18em;
       margin-bottom: 0.5rem;
       transition: background 0.15s;
     }
-    .btn:hover { background: #4040c8; }
-    .btn:active { background: #2828a0; }
+    .btn:hover { background: #3838c0; }
+    .btn:active { background: #2020a0; }
+    .btn:disabled { background: #1a1a40; color: #404080; cursor: default; }
 
     .btn-ghost {
       width: 100%;
-      padding: 0.65rem;
+      padding: 0.6rem;
       background: transparent;
-      border: 1px solid #2a2a4a;
-      color: #6060a8;
+      border: 1px solid #222240;
+      color: #505090;
       cursor: pointer;
       font-family: inherit;
-      font-size: 0.8rem;
+      font-size: 0.75rem;
       letter-spacing: 0.1em;
-      margin-bottom: 0.5rem;
+      margin-bottom: 0.4rem;
       transition: border-color 0.15s, color 0.15s;
     }
-    .btn-ghost:hover { border-color: #5050a0; color: #a0a0d8; }
+    .btn-ghost:hover { border-color: #4040a0; color: #9090d8; }
 
-    /* ── ERROR / SUCCESS ─────────────────────────────────────── */
-    .msg {
-      font-size: 0.75rem;
-      min-height: 1.1rem;
-      margin-bottom: 0.75rem;
-      color: #e05050;
-    }
-    .msg.ok { color: #50c878; }
+    .msg { font-size: 0.75rem; min-height: 1.1rem; margin-bottom: 0.75rem; color: #d04040; }
+    .msg.ok { color: #40b870; }
 
-    /* ── STEP INDICATOR ──────────────────────────────────────── */
-    .steps {
-      display: flex;
-      gap: 0.4rem;
-      margin-bottom: 1.5rem;
-    }
-    .step-dot {
-      height: 2px;
-      flex: 1;
-      background: #1e1e38;
+    /* step dots */
+    .steps { display: flex; gap: 0.4rem; margin-bottom: 1.75rem; }
+    .dot {
+      height: 2px; flex: 1; background: #1a1a30;
       transition: background 0.2s;
     }
-    .step-dot.done { background: #5050a0; }
-    .step-dot.active { background: #a0a0f8; }
+    .dot.done   { background: #4040a0; }
+    .dot.active { background: #9090e8; }
 
-    /* ── CLASS CARDS ─────────────────────────────────────────── */
+    /* class cards */
     .class-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -138,56 +129,79 @@
     .class-card {
       padding: 1rem 0.5rem 0.75rem;
       background: #0a0a14;
-      border: 1px solid #1e1e38;
+      border: 1px solid #1a1a30;
       cursor: pointer;
       text-align: center;
       transition: border-color 0.15s;
     }
-    .class-card:hover { border-color: #3030a8; }
-    .class-card.selected { border-color: #a0a0f8; }
+    .class-card:hover { border-color: #2828a0; }
+    .class-card.selected { border-color: #8080d8; }
     .class-icon { font-size: 1.6rem; margin-bottom: 0.4rem; }
-    .class-name { font-size: 0.7rem; letter-spacing: 0.15em; color: #8080b8; }
-    .class-card.selected .class-name { color: #c8c8f8; }
+    .class-name { font-size: 0.65rem; letter-spacing: 0.18em; color: #606090; }
+    .class-card.selected .class-name { color: #b0b0e8; }
 
-    /* ── STAT PREVIEW ────────────────────────────────────────── */
+    /* stat block */
     .stat-block {
       background: #0a0a14;
-      border: 1px solid #1e1e38;
+      border: 1px solid #1a1a30;
       padding: 0.75rem;
       margin-bottom: 1rem;
       display: none;
     }
     .stat-block.visible { display: block; }
+    .class-desc { font-size: 0.7rem; color: #484880; margin-bottom: 0.6rem; line-height: 1.65; }
     .stat-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 0.3rem 0.5rem;
+      gap: 0.25rem 0.5rem;
     }
-    .stat-item { display: flex; justify-content: space-between; }
-    .stat-label { font-size: 0.7rem; color: #5050a0; }
-    .stat-val   { font-size: 0.7rem; color: #a0a0d8; }
-    .class-desc { font-size: 0.7rem; color: #5050a0; margin-bottom: 0.5rem; line-height: 1.6; }
+    .stat-row { display: flex; justify-content: space-between; }
+    .sl { font-size: 0.68rem; color: #404080; }
+    .sv { font-size: 0.68rem; color: #9090c8; }
 
-    /* ── APPEARANCE ──────────────────────────────────────────── */
-    .appear-row {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 0.5rem;
-      margin-bottom: 0.75rem;
+    /* appearance layout */
+    .appear-layout {
+      display: flex;
+      gap: 1.5rem;
+      align-items: flex-start;
+      margin-bottom: 1rem;
     }
+
+    /* canvas sprite preview */
+    .preview-wrap {
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    #char-preview {
+      background: #0a0a14;
+      border: 1px solid #1a1a30;
+      image-rendering: pixelated;
+      display: block;
+    }
+    .preview-label {
+      font-size: 0.6rem;
+      color: #303060;
+      letter-spacing: 0.15em;
+    }
+
+    .appear-fields { flex: 1; }
+    .appear-field { margin-bottom: 0.6rem; }
     .appear-field label {
       display: block;
       font-size: 0.65rem;
       letter-spacing: 0.15em;
-      color: #5050a0;
+      color: #404080;
       margin-bottom: 0.3rem;
     }
 
-    /* ── CHARACTER CARDS ─────────────────────────────────────── */
+    /* character select */
     .char-card {
       background: #0a0a14;
-      border: 1px solid #1e1e38;
-      padding: 1rem;
+      border: 1px solid #1a1a30;
+      padding: 0.9rem;
       margin-bottom: 0.5rem;
       cursor: pointer;
       display: flex;
@@ -195,53 +209,134 @@
       align-items: center;
       transition: border-color 0.15s;
     }
-    .char-card:hover { border-color: #3030a8; }
-    .char-name  { font-size: 0.95rem; color: #e0e0f8; margin-bottom: 0.2rem; }
-    .char-meta  { font-size: 0.7rem; color: #5050a0; }
-    .char-stats { font-size: 0.65rem; color: #3838a0; text-align: right; line-height: 1.8; }
+    .char-card:hover { border-color: #2828a0; }
+    .char-name { font-size: 0.9rem; color: #dcdcf8; margin-bottom: 0.2rem; }
+    .char-meta { font-size: 0.68rem; color: #404080; }
+    .char-stats { font-size: 0.62rem; color: #303068; text-align: right; line-height: 1.9; }
 
-    .divider {
-      border: none;
-      border-top: 1px solid #1e1e38;
-      margin: 1.25rem 0;
+    hr.div { border: none; border-top: 1px solid #1a1a30; margin: 1.25rem 0; }
+
+    /* class preview row in step 3 */
+    .class-preview-row {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1rem;
     }
+    #class-preview {
+      background: #0a0a14;
+      border: 1px solid #1a1a30;
+      image-rendering: pixelated;
+      display: block;
+      flex-shrink: 0;
+    }
+    .class-preview-desc { flex: 1; }
   </style>
 </head>
 <body>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- SCREEN 1 — LOGIN / SIGNUP                                      -->
-<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SCREEN 1 — AUTH -->
 <div id="screen-auth" class="screen active">
   <div class="panel">
     <div class="game-title">BROWSER RPG PROTOTYPE</div>
-    <h1 id="auth-heading">Sign in</h1>
-
+    <h1 id="auth-h">Sign in</h1>
     <div id="auth-msg" class="msg"></div>
     <input type="email"    id="auth-email"    placeholder="Email address" />
     <input type="password" id="auth-password" placeholder="Password" />
-    <button class="btn" onclick="handleAuth()">ENTER</button>
-    <button class="btn-ghost" onclick="toggleAuthMode()" id="auth-toggle">No account? Sign up</button>
+    <button class="btn"       onclick="handleAuth()">ENTER</button>
+    <button class="btn-ghost" onclick="toggleMode()" id="auth-toggle">No account? Sign up</button>
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- SCREEN 2 — CHARACTER CREATION (3 steps)                        -->
-<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SCREEN 2 — CHARACTER CREATION -->
 <div id="screen-create" class="screen">
   <div class="panel">
     <div class="game-title">BROWSER RPG PROTOTYPE</div>
     <h1>New Character</h1>
 
     <div class="steps">
-      <div class="step-dot active"  id="dot-1"></div>
-      <div class="step-dot"         id="dot-2"></div>
-      <div class="step-dot"         id="dot-3"></div>
+      <div class="dot active" id="dot-1"></div>
+      <div class="dot"        id="dot-2"></div>
+      <div class="dot"        id="dot-3"></div>
     </div>
 
-    <!-- ── STEP 1: CLASS ── -->
+    <!-- STEP 1: NAME -->
     <div id="step-1">
+      <h2>NAME YOUR CHARACTER</h2>
+      <input type="text" id="char-name" placeholder="Character name" maxlength="20" />
+      <div id="msg-1" class="msg"></div>
+      <button class="btn" onclick="goStep(2)">NEXT</button>
+    </div>
+
+    <!-- STEP 2: APPEARANCE -->
+    <div id="step-2" style="display:none">
+      <h2>APPEARANCE</h2>
+      <div class="appear-layout">
+
+        <div class="preview-wrap">
+          <canvas id="char-preview" width="128" height="192"></canvas>
+          <div class="preview-label">PREVIEW</div>
+        </div>
+
+        <div class="appear-fields">
+          <div class="appear-field">
+            <label>SKIN TONE</label>
+            <select id="skin-tone" onchange="refreshPreview()">
+              <option value="0">Light</option>
+              <option value="1">Medium</option>
+              <option value="2">Tan</option>
+              <option value="3">Dark</option>
+            </select>
+          </div>
+          <div class="appear-field">
+            <label>HAIR STYLE</label>
+            <select id="hair-style" onchange="refreshPreview()">
+              <option value="0">Short</option>
+              <option value="1">Long</option>
+              <option value="2">Spiky</option>
+              <option value="3">Bun</option>
+            </select>
+          </div>
+          <div class="appear-field">
+            <label>HAIR COLOR</label>
+            <select id="hair-color" onchange="refreshPreview()">
+              <option value="0">Black</option>
+              <option value="1">Brown</option>
+              <option value="2">Blonde</option>
+              <option value="3">Red</option>
+              <option value="4">White</option>
+              <option value="5">Blue</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div id="msg-2" class="msg"></div>
+      <button class="btn"       onclick="goStep(3)">NEXT</button>
+      <button class="btn-ghost" onclick="goStep(1)">BACK</button>
+    </div>
+
+    <!-- STEP 3: CLASS -->
+    <div id="step-3" style="display:none">
       <h2>CHOOSE CLASS</h2>
+
+      <div class="class-preview-row">
+        <canvas id="class-preview" width="64" height="96"></canvas>
+        <div class="class-preview-desc">
+          <div class="stat-block visible" id="class-stat-block">
+            <div class="class-desc" id="class-desc">Select a class to see its stats.</div>
+            <div class="stat-grid">
+              <div class="stat-row"><span class="sl">STR</span><span class="sv" id="p-str">—</span></div>
+              <div class="stat-row"><span class="sl">DEX</span><span class="sv" id="p-dex">—</span></div>
+              <div class="stat-row"><span class="sl">INT</span><span class="sv" id="p-int">—</span></div>
+              <div class="stat-row"><span class="sl">VIT</span><span class="sv" id="p-vit">—</span></div>
+              <div class="stat-row"><span class="sl">AGI</span><span class="sv" id="p-agi">—</span></div>
+              <div class="stat-row"><span class="sl">LUK</span><span class="sv" id="p-luk">—</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div class="class-grid">
         <div class="class-card" id="card-warrior" onclick="selectClass('warrior')">
           <div class="class-icon">⚔️</div>
@@ -257,65 +352,6 @@
         </div>
       </div>
 
-      <div class="stat-block" id="stat-preview">
-        <div class="class-desc" id="class-desc"></div>
-        <div class="stat-grid">
-          <div class="stat-item"><span class="stat-label">STR</span><span class="stat-val" id="p-str">—</span></div>
-          <div class="stat-item"><span class="stat-label">DEX</span><span class="stat-val" id="p-dex">—</span></div>
-          <div class="stat-item"><span class="stat-label">INT</span><span class="stat-val" id="p-int">—</span></div>
-          <div class="stat-item"><span class="stat-label">VIT</span><span class="stat-val" id="p-vit">—</span></div>
-          <div class="stat-item"><span class="stat-label">AGI</span><span class="stat-val" id="p-agi">—</span></div>
-          <div class="stat-item"><span class="stat-label">LUK</span><span class="stat-val" id="p-luk">—</span></div>
-        </div>
-      </div>
-
-      <div id="msg-1" class="msg"></div>
-      <button class="btn" onclick="goStep(2)">NEXT</button>
-    </div>
-
-    <!-- ── STEP 2: NAME ── -->
-    <div id="step-2" style="display:none">
-      <h2>NAME YOUR CHARACTER</h2>
-      <input type="text" id="char-name" placeholder="Character name" maxlength="20" />
-      <div id="msg-2" class="msg"></div>
-      <button class="btn"       onclick="goStep(3)">NEXT</button>
-      <button class="btn-ghost" onclick="goStep(1)">BACK</button>
-    </div>
-
-    <!-- ── STEP 3: APPEARANCE ── -->
-    <div id="step-3" style="display:none">
-      <h2>APPEARANCE</h2>
-      <div class="appear-row">
-        <div class="appear-field">
-          <label>SKIN TONE</label>
-          <select id="skin-tone">
-            <option value="0">Light</option>
-            <option value="1">Medium</option>
-            <option value="2">Tan</option>
-            <option value="3">Dark</option>
-          </select>
-        </div>
-        <div class="appear-field">
-          <label>HAIR STYLE</label>
-          <select id="hair-style">
-            <option value="0">Short</option>
-            <option value="1">Long</option>
-            <option value="2">Spiky</option>
-            <option value="3">Bun</option>
-          </select>
-        </div>
-        <div class="appear-field">
-          <label>HAIR COLOR</label>
-          <select id="hair-color">
-            <option value="0">Black</option>
-            <option value="1">Brown</option>
-            <option value="2">Blonde</option>
-            <option value="3">Red</option>
-            <option value="4">White</option>
-            <option value="5">Blue</option>
-          </select>
-        </div>
-      </div>
       <div id="msg-3" class="msg"></div>
       <button class="btn"       onclick="createCharacter()">CREATE CHARACTER</button>
       <button class="btn-ghost" onclick="goStep(2)">BACK</button>
@@ -323,15 +359,13 @@
   </div>
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- SCREEN 3 — CHARACTER SELECT                                    -->
-<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SCREEN 3 — CHARACTER SELECT -->
 <div id="screen-select" class="screen">
   <div class="panel">
     <div class="game-title">BROWSER RPG PROTOTYPE</div>
     <h1>Your Characters</h1>
     <div id="char-list"></div>
-    <hr class="divider">
+    <hr class="div">
     <button class="btn-ghost" onclick="startNewChar()">+ NEW CHARACTER</button>
     <button class="btn-ghost" onclick="signOut()">SIGN OUT</button>
   </div>
@@ -339,54 +373,155 @@
 
 
 <script>
-// ══════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────
 // CONFIG
-// ══════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────
 const SUPABASE_URL  = 'https://qlehgpddqxkgdvfhwtdu.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFsZWhncGRkcXhrZ2R2Zmh3dGR1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIzMTgzODMsImV4cCI6MjEwNzg5NDM4M30.uNNdGVwReFk4pGmYETabbC9NfiWj08I8_-H5dcWm_gw';
-
 const { createClient } = supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_ANON);
 
-// ══════════════════════════════════════════════════════════════════
-// STARTING STATS + CLASS DESCRIPTIONS
-// 20 points pre-allocated per class
-// ══════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────
+// CLASS DATA
+// Stats: 20 points pre-allocated per class
+// Crit rule: crits only on physical attacks/skills — LUK irrelevant for mage
+// ─────────────────────────────────────────────────────────────────
 const CLASS_DATA = {
   warrior: {
     stats: { strength:8, vitality:6, agility:3, dexterity:2, intelligence:0, luck:1 },
-    desc: 'High STR and VIT. Built to take hits and deal physical damage up close.'
+    desc:  'High STR and VIT. Built for the front line — takes hits, deals physical damage up close. DEF milestone bonuses activate earlier than other classes.',
+    color: '#7A1820'
   },
   archer: {
     stats: { strength:2, vitality:1, agility:5, dexterity:8, intelligence:0, luck:4 },
-    desc: 'High DEX and AGI. Fast, evasive, deadly at range. LUK feeds crit chance.'
+    desc:  'High DEX and AGI. Fast and evasive with strong ranged damage. LUK feeds crit chance. HIT stat from DEX counters enemy FLEE.',
+    color: '#1A6020'
   },
   mage: {
-    stats: { strength:0, vitality:2, agility:1, dexterity:6, intelligence:8, luck:3 },
-    desc: 'High INT. Powerful magic damage and defence. DEX reduces cast time.'
+    stats: { strength:0, vitality:3, agility:1, dexterity:6, intelligence:10, luck:0 },
+    desc:  'High INT. Magic skills deal formula-based damage — no crit rolls. DEX reduces cast time. LUK omitted: crits are physical-only.',
+    color: '#1A1878'
   }
 };
 
-// ══════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────
+// SPRITE PALETTE
+// ─────────────────────────────────────────────────────────────────
+const SKIN_PAL  = ['#FFD0A0','#E8A870','#C88040','#8B5523'];
+const HAIR_PAL  = ['#1A1818','#6B3A2A','#D4B830','#B02020','#D8D8E0','#1830C0'];
+
+// ─────────────────────────────────────────────────────────────────
+// SPRITE DRAWING
+// Character drawn on a 32×48 logical pixel grid
+// ─────────────────────────────────────────────────────────────────
+function drawSprite(canvas, skinIdx, hairIdx, hairColIdx, cls, scale) {
+  const S = scale || 4;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const sk = SKIN_PAL[skinIdx]     || SKIN_PAL[0];
+  const hr = HAIR_PAL[hairColIdx]  || HAIR_PAL[0];
+  const sh = cls ? (CLASS_DATA[cls]?.color || '#404870') : '#404870';
+  const pt = '#242438';   // pants
+  const bt = '#3A2810';   // boots
+  const dk = '#080808';   // dark (eyes, outlines)
+  const wh = '#F0F0F8';   // white (eye shine)
+
+  const r = (x, y, w, h, c) => {
+    ctx.fillStyle = c;
+    ctx.fillRect(x * S, y * S, w * S, h * S);
+  };
+
+  // ── HAIR (drawn behind head so head renders on top) ──
+  switch (hairIdx) {
+    case 0: // short
+      r(11,1,10,5,hr);
+      r(10,4,1,4,hr); r(21,4,1,4,hr);
+      break;
+    case 1: // long
+      r(10,1,12,5,hr);
+      r(8,4,3,14,hr); r(21,4,3,14,hr);
+      break;
+    case 2: // spiky
+      r(11,0,2,6,hr); r(14,1,2,5,hr); r(17,0,2,6,hr);
+      r(10,3,1,4,hr); r(21,3,1,4,hr);
+      break;
+    case 3: // bun
+      r(11,2,10,4,hr);
+      r(13,0,6,5,hr);
+      break;
+  }
+
+  // ── HEAD ──
+  r(11,4,10,9,sk);       // main head
+  r(9,6,2,4,sk);         // left ear
+  r(21,6,2,4,sk);        // right ear
+
+  // ── FACE ──
+  r(12,7,2,2,dk);        // left eye
+  r(18,7,2,2,dk);        // right eye
+  r(12,7,1,1,wh);        // eye shine L
+  r(18,7,1,1,wh);        // eye shine R
+  r(14,11,4,1,'#A04848'); // mouth
+
+  // ── NECK ──
+  r(14,13,4,3,sk);
+
+  // ── TORSO ──
+  r(9,16,14,10,sh);      // shirt/tunic
+
+  // ── ARMS + HANDS ──
+  r(6,16,3,10,sh);       // left arm
+  r(23,16,3,10,sh);      // right arm
+  r(6,25,3,2,sk);        // left hand
+  r(23,25,3,2,sk);       // right hand
+
+  // ── BELT ──
+  r(9,25,14,2,'#18160A');
+
+  // ── LEGS ──
+  r(9,27,5,12,pt);       // left leg
+  r(18,27,5,12,pt);      // right leg
+
+  // ── BOOTS ──
+  r(8,38,6,4,bt);        // left boot
+  r(18,38,6,4,bt);       // right boot
+}
+
+function refreshPreview() {
+  const sk = parseInt(document.getElementById('skin-tone').value);
+  const hs = parseInt(document.getElementById('hair-style').value);
+  const hc = parseInt(document.getElementById('hair-color').value);
+  drawSprite(document.getElementById('char-preview'), sk, hs, hc, selectedClass, 4);
+}
+
+function refreshClassPreview() {
+  const sk = parseInt(document.getElementById('skin-tone').value);
+  const hs = parseInt(document.getElementById('hair-style').value);
+  const hc = parseInt(document.getElementById('hair-color').value);
+  drawSprite(document.getElementById('class-preview'), sk, hs, hc, selectedClass, 2);
+}
+
+// ─────────────────────────────────────────────────────────────────
 // STATE
-// ══════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────
 let authMode      = 'signin';
 let selectedClass = null;
 
-// ══════════════════════════════════════════════════════════════════
-// SCREEN MANAGEMENT
-// ══════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────
+// SCREENS
+// ─────────────────────────────────────────────────────────────────
 function showScreen(id) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
 }
 
-// ══════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────
 // AUTH
-// ══════════════════════════════════════════════════════════════════
-function toggleAuthMode() {
+// ─────────────────────────────────────────────────────────────────
+function toggleMode() {
   authMode = authMode === 'signin' ? 'signup' : 'signin';
-  document.getElementById('auth-heading').textContent =
+  document.getElementById('auth-h').textContent =
     authMode === 'signin' ? 'Sign in' : 'Sign up';
   document.getElementById('auth-toggle').textContent =
     authMode === 'signin' ? 'No account? Sign up' : 'Have an account? Sign in';
@@ -400,26 +535,17 @@ async function handleAuth() {
   msgEl.className = 'msg';
   msgEl.textContent = '';
 
-  if (!email || !password) {
-    msgEl.textContent = 'Email and password required.';
-    return;
-  }
+  if (!email || !password) { msgEl.textContent = 'Email and password required.'; return; }
 
-  let result;
-  if (authMode === 'signup') {
-    result = await db.auth.signUp({ email, password });
-  } else {
-    result = await db.auth.signInWithPassword({ email, password });
-  }
+  const result = authMode === 'signup'
+    ? await db.auth.signUp({ email, password })
+    : await db.auth.signInWithPassword({ email, password });
 
-  if (result.error) {
-    msgEl.textContent = result.error.message;
-    return;
-  }
+  if (result.error) { msgEl.textContent = result.error.message; return; }
 
   if (authMode === 'signup') {
     msgEl.className = 'msg ok';
-    msgEl.textContent = 'Account created — check your email to confirm, then sign in.';
+    msgEl.textContent = 'Check your email to confirm your account, then sign in.';
     return;
   }
 
@@ -430,7 +556,6 @@ async function afterLogin() {
   const { data: { session } } = await db.auth.getSession();
   if (!session) return;
 
-  // fetch all characters this user owns
   const { data: chars } = await db
     .from('characters')
     .select('*')
@@ -439,7 +564,6 @@ async function afterLogin() {
 
   if (!chars || chars.length === 0) {
     startNewChar();
-    showScreen('screen-create');
   } else {
     renderCharList(chars, session);
     showScreen('screen-select');
@@ -451,35 +575,32 @@ async function signOut() {
   showScreen('screen-auth');
 }
 
-// ══════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────
 // CHARACTER SELECT
-// ══════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────
 function renderCharList(chars, session) {
   const list = document.getElementById('char-list');
   list.innerHTML = '';
+  const icons = { warrior:'⚔️', archer:'🏹', mage:'🔮' };
   chars.forEach(c => {
     const card = document.createElement('div');
     card.className = 'char-card';
-    const classIcons = { warrior:'⚔️', archer:'🏹', mage:'🔮' };
     card.innerHTML = `
       <div>
-        <div class="char-name">${classIcons[c.class] || ''} ${c.name}</div>
-        <div class="char-meta">${c.class.toUpperCase()} &nbsp;·&nbsp; Level ${c.level} &nbsp;·&nbsp; ${c.xp} XP</div>
+        <div class="char-name">${icons[c.class]||''} ${c.name}</div>
+        <div class="char-meta">${c.class.toUpperCase()} &nbsp;·&nbsp; Lv ${c.level} &nbsp;·&nbsp; ${c.xp} XP</div>
       </div>
       <div class="char-stats">
         STR ${c.strength} &nbsp; DEX ${c.dexterity}<br>
         VIT ${c.vitality} &nbsp; AGI ${c.agility}<br>
         INT ${c.intelligence} &nbsp; LUK ${c.luck}
-      </div>
-    `;
+      </div>`;
     card.onclick = () => enterWorld(c, session);
     list.appendChild(card);
   });
 }
 
 function enterWorld(character, session) {
-  // hand off auth state to the game client via localStorage
-  // index.html reads these on load before opening the WebSocket
   localStorage.setItem('rpg_token',      session.access_token);
   localStorage.setItem('rpg_char_id',    character.id);
   localStorage.setItem('rpg_char_name',  character.name);
@@ -487,69 +608,81 @@ function enterWorld(character, session) {
   window.location.href = 'index.html';
 }
 
-// ══════════════════════════════════════════════════════════════════
-// CHARACTER CREATION
-// ══════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────
+// CHARACTER CREATION — STEP MANAGEMENT
+// ─────────────────────────────────────────────────────────────────
 function startNewChar() {
   selectedClass = null;
   document.querySelectorAll('.class-card').forEach(c => c.classList.remove('selected'));
-  document.getElementById('stat-preview').classList.remove('visible');
   document.getElementById('char-name').value = '';
-  ['msg-1','msg-2','msg-3'].forEach(id => document.getElementById(id).textContent = '');
+  document.getElementById('class-desc').textContent = 'Select a class to see its stats.';
+  ['p-str','p-dex','p-int','p-vit','p-agi','p-luk'].forEach(id =>
+    document.getElementById(id).textContent = '—');
+  ['msg-1','msg-2','msg-3'].forEach(id =>
+    document.getElementById(id).textContent = '');
   goStep(1);
   showScreen('screen-create');
 }
 
 function goStep(n) {
-  // validate before advancing
-  if (n === 2 && !selectedClass) {
-    document.getElementById('msg-1').textContent = 'Choose a class to continue.';
-    return;
-  }
-  if (n === 3) {
+  // validation
+  if (n === 2) {
     const name = document.getElementById('char-name').value.trim();
     if (!name || name.length < 2) {
-      document.getElementById('msg-2').textContent = 'Name must be at least 2 characters.';
+      document.getElementById('msg-1').textContent = 'Name must be at least 2 characters.';
       return;
     }
+    document.getElementById('msg-1').textContent = '';
+  }
+  if (n === 3 && n > 2) {
     document.getElementById('msg-2').textContent = '';
   }
 
-  // show the right step panel
   [1,2,3].forEach(i => {
     document.getElementById(`step-${i}`).style.display = i === n ? 'block' : 'none';
     const dot = document.getElementById(`dot-${i}`);
-    dot.className = 'step-dot' + (i < n ? ' done' : i === n ? ' active' : '');
+    dot.className = 'dot' + (i < n ? ' done' : i === n ? ' active' : '');
   });
+
+  // draw previews when entering appearance or class step
+  if (n === 2) refreshPreview();
+  if (n === 3) refreshClassPreview();
 }
 
+// ─────────────────────────────────────────────────────────────────
+// CLASS SELECTION
+// ─────────────────────────────────────────────────────────────────
 function selectClass(cls) {
   selectedClass = cls;
   document.querySelectorAll('.class-card').forEach(c => c.classList.remove('selected'));
   document.getElementById(`card-${cls}`).classList.add('selected');
 
   const { stats, desc } = CLASS_DATA[cls];
+  document.getElementById('class-desc').textContent = desc;
   document.getElementById('p-str').textContent = stats.strength;
   document.getElementById('p-dex').textContent = stats.dexterity;
   document.getElementById('p-int').textContent = stats.intelligence;
   document.getElementById('p-vit').textContent = stats.vitality;
   document.getElementById('p-agi').textContent = stats.agility;
   document.getElementById('p-luk').textContent = stats.luck;
-  document.getElementById('class-desc').textContent = desc;
-  document.getElementById('stat-preview').classList.add('visible');
-  document.getElementById('msg-1').textContent = '';
+  document.getElementById('msg-3').textContent = '';
+
+  // redraw class preview with class color
+  refreshClassPreview();
 }
 
+// ─────────────────────────────────────────────────────────────────
+// CREATE CHARACTER — writes to Supabase
+// ─────────────────────────────────────────────────────────────────
 async function createCharacter() {
   const errEl = document.getElementById('msg-3');
   errEl.className = 'msg';
   errEl.textContent = '';
 
+  if (!selectedClass) { errEl.textContent = 'Choose a class to continue.'; return; }
+
   const { data: { session } } = await db.auth.getSession();
-  if (!session) {
-    errEl.textContent = 'Session expired. Please sign in again.';
-    return;
-  }
+  if (!session) { errEl.textContent = 'Session expired. Please sign in again.'; return; }
 
   const stats = CLASS_DATA[selectedClass].stats;
 
@@ -576,24 +709,20 @@ async function createCharacter() {
 
   if (error) {
     errEl.textContent = error.message.includes('unique')
-      ? 'That name is already taken.'
+      ? 'That name is already taken. Choose another.'
       : error.message;
     return;
   }
 
-  // go straight into the game with the new character
   enterWorld(data, session);
 }
 
-// ══════════════════════════════════════════════════════════════════
-// INIT — check for existing session on page load
-// If already logged in, skip the login screen
-// ══════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────
+// INIT — check for existing session on load
+// ─────────────────────────────────────────────────────────────────
 (async () => {
   const { data: { session } } = await db.auth.getSession();
-  if (session) {
-    await afterLogin();
-  }
+  if (session) await afterLogin();
 })();
 </script>
 </body>
