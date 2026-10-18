@@ -169,7 +169,7 @@ function pickTarget(wx,wy){
 }
 
 // ── ATTACK ─────────────────────────────────────────────────────────────────
-ATTACK_PLACEHOLDER
+function triggerAttackOnTarget(){
   if(player.dead||player.atkCd>0||stunned)return;
   if(!targetSlime||!targetSlime.alive)return;
   const dx=targetSlime.x-player.x,dy=targetSlime.y-player.y;
