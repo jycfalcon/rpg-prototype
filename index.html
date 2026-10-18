@@ -71,7 +71,7 @@ function connectWS() {
       if (msg.type === 'welcome') {
         myId = msg.id;
         for (const s of msg.others) others[s.id] = { ...s, x: s.x, y: s.y, tx: s.x, ty: s.y };
-        if (msg.slimes) slimes = msg.slimes;
+        if (msg.slimes) slimes = msg.slimes.map(s => ({...s, alive: true}));
       }
       if (msg.type === 'state') {
         const p = msg.player;
@@ -85,8 +85,7 @@ function connectWS() {
 
       // ── Server world state ───────────────────────────────────────────
       if (msg.type === 'world') {
-        slimes = msg.slimes;
-        // Keep targetSlime reference valid after array replacement
+        slimes = msg.slimes.map(s => ({...s, alive: true}));
         if (targetSlime) targetSlime = slimes.find(s => s.id === targetSlime.id) || null;
       }
       if (msg.type === 'player_hit') {
