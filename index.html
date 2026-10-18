@@ -956,8 +956,6 @@ function drawMinimap(){
       ctx.fillStyle = npc.color;
       ctx.beginPath();ctx.arc(mx+pad+npc.x*smx,my+pad+npc.y*smy,3,0,Math.PI*2);ctx.fill();
     }
-    ctx.fillStyle='rgba(168,85,247,0.6)';
-    ctx.beginPath();ctx.arc(mx+pad+RETURN_PORTAL_X*smx,my+pad+RETURN_PORTAL_Y*smy,3,0,Math.PI*2);ctx.fill();
   } else {
     for(const s of slimes){
       if(!s.alive)continue;
@@ -973,6 +971,9 @@ function drawMinimap(){
         ctx.beginPath();ctx.arc(kx,ky,s.isGiant?4:2.5,0,Math.PI*2);ctx.fill();
       }
     }
+    // Return portal
+    ctx.fillStyle='rgba(168,85,247,0.8)';
+    ctx.beginPath();ctx.arc(mx+pad+RETURN_PORTAL_X*smx,my+pad+RETURN_PORTAL_Y*smy,3,0,Math.PI*2);ctx.fill();
   }
 
   const px=mx+pad+player.x*smx, py=my+pad+player.y*smy;
