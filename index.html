@@ -78,6 +78,23 @@
     cursor: pointer; padding: 3px 8px; border-radius: 2px; font-size: 11px;
   }
   #chat-send:active { background: #2980b9; }
+
+  /* ── MOBILE ─────────────────────────────────────────────────────── */
+  @media (max-width: 768px) {
+    #party-panel { width: 138px; top: 120px; }
+    #chat-panel  { width: 170px; bottom: 88px; }
+    .rpg-panel   { font-size: 9px; }
+    .party-entry { padding: 3px 6px; }
+    .party-name  { font-size: 9px; margin-bottom: 2px; }
+    .party-hpbar { height: 4px; }
+    .party-hptext { font-size: 8px; }
+    .s-pill      { font-size: 7px; padding: 1px 3px; }
+    #chat-messages { height: 80px; }
+    .chat-msg    { font-size: 9px; }
+    #chat-input  { font-size: 9px; padding: 2px 4px; }
+    #chat-send   { padding: 2px 6px; font-size: 10px; }
+    .rpg-panel-header { padding: 4px 7px; }
+  }
 </style>
 </head>
 <body>
@@ -175,6 +192,7 @@ function connectWS() {
       if (msg.type === 'join') {
         others[msg.id] = { id:msg.id, x:W/2, y:H/2, tx:W/2, ty:H/2, hp:P_HP, facing:'down', rolling:false, atkTimer:0, atkAngle:0, dead:false, stunned:false };
         addChatMsg(null, `P${msg.id} joined the game`, true);
+        partyUserMin = false;  // new player joined — allow auto-expand once
       }
       if (msg.type === 'leave') {
         delete others[msg.id];
@@ -840,11 +858,14 @@ requestAnimationFrame(ts=>{last=ts;requestAnimationFrame(loop);});
 // ── UI PANELS ─────────────────────────────────────────────────────────────
 const chatLog = [];
 
+let partyUserMin = false;  // user explicitly minimised the party panel
+
 function togglePanel(which) {
   const el  = document.getElementById(`${which}-panel`);
   const tog = document.getElementById(`${which}-tog`);
   const min = el.classList.toggle('minimized');
   tog.textContent = min ? '+' : '−';
+  if (which === 'party') partyUserMin = min;
 }
 
 function escH(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -908,9 +929,9 @@ function updatePartyPanel() {
   if (countEl) countEl.textContent = `(${count})`;
   body.innerHTML = html;
 
-  // Auto-expand when party forms
+  // Auto-expand when party forms — but respect manual minimise
   const panel = document.getElementById('party-panel');
-  if (count > 1 && panel && panel.classList.contains('minimized')) togglePanel('party');
+  if (count > 1 && panel && panel.classList.contains('minimized') && !partyUserMin) togglePanel('party');
 }
 
 setInterval(updatePartyPanel, 150);
