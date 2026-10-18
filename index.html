@@ -11,10 +11,101 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { background: #0a0a14; overflow: hidden; touch-action: none; }
   canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; touch-action: none; }
+
+  /* ── UI PANELS ─────────────────────────────────────────────────────── */
+  .rpg-panel {
+    position: fixed; z-index: 200;
+    background: rgba(8,8,18,0.9);
+    border: 1px solid #2a3050; border-radius: 4px;
+    font-family: 'Courier New', monospace; font-size: 10px; color: #aaa;
+    user-select: none; pointer-events: all;
+  }
+  #party-panel { top: 130px; left: 10px; width: 172px; }
+  #chat-panel  { bottom: 62px; left: 10px; width: 224px; }
+
+  .rpg-panel-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 5px 8px; background: rgba(255,255,255,0.05);
+    border-bottom: 1px solid #2a3050;
+    cursor: pointer; border-radius: 4px 4px 0 0;
+  }
+  .rpg-panel.minimized .rpg-panel-header { border-radius: 4px; border-bottom: none; }
+  .rpg-panel-body { display: block; }
+  .rpg-panel.minimized .rpg-panel-body { display: none; }
+  .rpg-toggle { font-size: 13px; color: #445; line-height: 1; }
+
+  /* Party entries */
+  .party-entry { padding: 5px 8px; border-bottom: 1px solid #12121e; }
+  .party-entry.dead { opacity: 0.45; }
+  .party-entry.self { background: rgba(52,152,219,0.07); }
+  .party-name {
+    display: flex; align-items: center; gap: 3px;
+    margin-bottom: 3px; font-size: 10px; color: #ccc; flex-wrap: wrap;
+  }
+  .you-badge { font-size: 8px; color: #3498db; }
+  .party-hpbar { height: 5px; background: #0a0a14; border-radius: 2px; overflow: hidden; margin-bottom: 2px; }
+  .party-hpfill { height: 100%; border-radius: 2px; transition: width 0.12s; }
+  .party-hptext { font-size: 9px; color: #445; }
+
+  /* Status pills */
+  .s-pill { font-size: 8px; padding: 1px 4px; border-radius: 2px; font-weight: bold; white-space: nowrap; }
+  .s-stun { background: #4a3900; color: #f1c40f; }
+  .s-dead { background: #3a0000; color: #e74c3c; }
+  .s-roll { background: #001c3a; color: #88aaff; }
+
+  /* Chat */
+  #chat-messages {
+    height: 120px; overflow-y: auto; padding: 4px 8px;
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  #chat-messages::-webkit-scrollbar { width: 3px; }
+  #chat-messages::-webkit-scrollbar-thumb { background: #2a3050; }
+  .chat-msg { font-size: 10px; color: #bbb; word-break: break-word; line-height: 1.4; }
+  .chat-from { color: #7fc8ff; }
+  .chat-sys { color: #445; font-style: italic; }
+  #chat-input-row {
+    display: flex; gap: 4px; padding: 4px;
+    border-top: 1px solid #1a1a2e;
+  }
+  #chat-input {
+    flex: 1; background: #0a0a14; border: 1px solid #2a3050;
+    color: #ccc; font-family: 'Courier New', monospace; font-size: 10px;
+    padding: 3px 6px; border-radius: 2px; outline: none; min-width: 0;
+  }
+  #chat-input:focus { border-color: #3498db; }
+  #chat-send {
+    background: #1e3a52; border: none; color: #7fc8ff;
+    cursor: pointer; padding: 3px 8px; border-radius: 2px; font-size: 11px;
+  }
+  #chat-send:active { background: #2980b9; }
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
+
+<!-- ── PARTY PANEL ──────────────────────────────────────────────────── -->
+<div id="party-panel" class="rpg-panel minimized">
+  <div class="rpg-panel-header" onclick="togglePanel('party')">
+    <span>⚔ PARTY <span id="party-count"></span></span>
+    <span class="rpg-toggle" id="party-tog">+</span>
+  </div>
+  <div class="rpg-panel-body" id="party-body"></div>
+</div>
+
+<!-- ── CHAT PANEL ───────────────────────────────────────────────────── -->
+<div id="chat-panel" class="rpg-panel minimized">
+  <div class="rpg-panel-header" onclick="togglePanel('chat')">
+    <span>💬 CHAT</span>
+    <span class="rpg-toggle" id="chat-tog">+</span>
+  </div>
+  <div class="rpg-panel-body">
+    <div id="chat-messages"></div>
+    <div id="chat-input-row">
+      <input id="chat-input" type="text" placeholder="Message…" maxlength="100" autocomplete="off">
+      <button id="chat-send" onclick="sendChatMsg()">▶</button>
+    </div>
+  </div>
+</div>
 <script>
 'use strict';
 const c = document.getElementById('c');
@@ -83,8 +174,13 @@ function connectWS() {
       }
       if (msg.type === 'join') {
         others[msg.id] = { id:msg.id, x:W/2, y:H/2, tx:W/2, ty:H/2, hp:P_HP, facing:'down', rolling:false, atkTimer:0, atkAngle:0, dead:false, stunned:false };
+        addChatMsg(null, `P${msg.id} joined the game`, true);
       }
-      if (msg.type === 'leave') delete others[msg.id];
+      if (msg.type === 'leave') {
+        delete others[msg.id];
+        addChatMsg(null, `P${msg.id} left`, true);
+      }
+      if (msg.type === 'chat') { addChatMsg(msg.from, msg.text, false); }
 
       // ── Server world state ───────────────────────────────────────────
       if (msg.type === 'world') {
@@ -740,6 +836,103 @@ function draw(){
 function loop(ts){const dt=Math.min((ts-last)/1000,0.05);last=ts;update(dt);draw();requestAnimationFrame(loop);}
 // World spawned by server
 requestAnimationFrame(ts=>{last=ts;requestAnimationFrame(loop);});
+
+// ── UI PANELS ─────────────────────────────────────────────────────────────
+const chatLog = [];
+
+function togglePanel(which) {
+  const el  = document.getElementById(`${which}-panel`);
+  const tog = document.getElementById(`${which}-tog`);
+  const min = el.classList.toggle('minimized');
+  tog.textContent = min ? '+' : '−';
+}
+
+function escH(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function addChatMsg(from, text, sys) {
+  const el = document.getElementById('chat-messages');
+  if (!el) return;
+  const div = document.createElement('div');
+  div.className = 'chat-msg' + (sys ? ' chat-sys' : '');
+  div.innerHTML = sys ? escH(text) : `<span class="chat-from">P${escH(from)}:</span> ${escH(text)}`;
+  el.appendChild(div);
+  while (el.children.length > 40) el.removeChild(el.firstChild);
+  el.scrollTop = el.scrollHeight;
+}
+
+function sendChatMsg() {
+  const inp = document.getElementById('chat-input');
+  const txt = (inp.value||'').trim();
+  if (!txt || !ws || ws.readyState !== 1) return;
+  ws.send(JSON.stringify({type:'chat', text: txt}));
+  inp.value = '';
+}
+
+// Status pills helper
+function statusPills(p) {
+  const pills = [];
+  if (p.stunned) pills.push('<span class="s-pill s-stun">★ STUN</span>');
+  if (p.rolling)  pills.push('<span class="s-pill s-roll">◎ ROLL</span>');
+  if (p.dead)     pills.push('<span class="s-pill s-dead">✗ DEAD</span>');
+  // Future: if (p.buffs) p.buffs.forEach(b => pills.push(...))
+  return pills.join('');
+}
+
+function makePartyEntry(id, hp, maxHp, dead, stunned, rolling, isSelf) {
+  const pct   = Math.max(0, Math.min(100, (hp / maxHp) * 100));
+  const col   = pct > 60 ? '#2ecc40' : pct > 30 ? '#f39c12' : '#e74c3c';
+  const pills = statusPills({stunned, rolling, dead});
+  return `<div class="party-entry${dead?' dead':''}${isSelf?' self':''}">
+    <div class="party-name">
+      <span>P${escH(id)}</span>
+      ${isSelf ? '<span class="you-badge">YOU</span>' : ''}
+      ${pills}
+    </div>
+    <div class="party-hpbar"><div class="party-hpfill" style="width:${pct.toFixed(1)}%;background:${col}"></div></div>
+    <div class="party-hptext">${Math.max(0,Math.ceil(hp))} / ${maxHp}</div>
+  </div>`;
+}
+
+function updatePartyPanel() {
+  const body = document.getElementById('party-body');
+  if (!body) return;
+
+  let html = makePartyEntry(myId||'?', player.hp, P_HP, player.dead, stunned, rolling, true);
+  let count = 1;
+  for (const [id, p] of Object.entries(others)) {
+    html += makePartyEntry(id, p.hp||0, P_HP, p.dead||false, p.stunned||false, p.rolling||false, false);
+    count++;
+  }
+
+  const countEl = document.getElementById('party-count');
+  if (countEl) countEl.textContent = `(${count})`;
+  body.innerHTML = html;
+
+  // Auto-expand when party forms
+  const panel = document.getElementById('party-panel');
+  if (count > 1 && panel && panel.classList.contains('minimized')) togglePanel('party');
+}
+
+setInterval(updatePartyPanel, 150);
+
+// Prevent game inputs when chat is focused
+document.addEventListener('DOMContentLoaded', () => {
+  const inp = document.getElementById('chat-input');
+  if (inp) {
+    inp.addEventListener('keydown', e => {
+      e.stopPropagation();
+      if (e.key === 'Enter') { sendChatMsg(); e.preventDefault(); }
+    });
+  }
+  ['party-panel','chat-panel'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('touchstart', e => e.stopPropagation(), {passive:true});
+    el.addEventListener('touchmove',  e => e.stopPropagation(), {passive:true});
+    el.addEventListener('touchend',   e => e.stopPropagation(), {passive:true});
+  });
+});
+
 </script>
 </body>
 </html>
