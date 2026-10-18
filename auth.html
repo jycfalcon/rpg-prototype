@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RPG — Login</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0d0d1a;
+      color: #c8c8d8;
+      font-family: 'Courier New', monospace;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ── SCREENS ─────────────────────────────────────────────── */
+    .screen { display: none; }
+    .screen.active { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+
+    .panel {
+      background: #12121f;
+      border: 1px solid #2a2a4a;
+      padding: 2.5rem 2rem;
+      width: 420px;
+      max-width: 95vw;
+    }
+
+    /* ── TYPOGRAPHY ──────────────────────────────────────────── */
+    .game-title {
+      font-size: 0.7rem;
+      letter-spacing: 0.25em;
+      color: #5050a0;
+      margin-bottom: 0.4rem;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      color: #e0dff8;
+      font-weight: normal;
+      letter-spacing: 0.1em;
+      margin-bottom: 2rem;
+    }
+
+    h2 {
+      font-size: 0.75rem;
+      color: #6060a8;
+      letter-spacing: 0.2em;
+      margin-bottom: 1.25rem;
+      padding-bottom: 0.6rem;
+      border-bottom: 1px solid #1e1e38;
+    }
+
+    /* ── INPUTS ──────────────────────────────────────────────── */
+    input, select {
+      width: 100%;
+      padding: 0.65rem 0.75rem;
+      margin-bottom: 0.6rem;
+      background: #0a0a14;
+      border: 1px solid #2a2a4a;
+      color: #c8c8d8;
+      font-family: inherit;
+      font-size: 0.85rem;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input:focus, select:focus { border-color: #5050a0; }
+    input::placeholder { color: #383860; }
+    select option { background: #0a0a14; }
+
+    /* ── BUTTONS ─────────────────────────────────────────────── */
+    .btn {
+      width: 100%;
+      padding: 0.7rem;
+      background: #3030a8;
+      color: #ddddf8;
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.8rem;
+      letter-spacing: 0.15em;
+      margin-bottom: 0.5rem;
+      transition: background 0.15s;
+    }
+    .btn:hover { background: #4040c8; }
+    .btn:active { background: #2828a0; }
+
+    .btn-ghost {
+      width: 100%;
+      padding: 0.65rem;
+      background: transparent;
+      border: 1px solid #2a2a4a;
+      color: #6060a8;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.8rem;
+      letter-spacing: 0.1em;
+      margin-bottom: 0.5rem;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .btn-ghost:hover { border-color: #5050a0; color: #a0a0d8; }
+
+    /* ── ERROR / SUCCESS ─────────────────────────────────────── */
+    .msg {
+      font-size: 0.75rem;
+      min-height: 1.1rem;
+      margin-bottom: 0.75rem;
+      color: #e05050;
+    }
+    .msg.ok { color: #50c878; }
+
+    /* ── STEP INDICATOR ──────────────────────────────────────── */
+    .steps {
+      display: flex;
+      gap: 0.4rem;
+      margin-bottom: 1.5rem;
+    }
+    .step-dot {
+      height: 2px;
+      flex: 1;
+      background: #1e1e38;
+      transition: background 0.2s;
+    }
+    .step-dot.done { background: #5050a0; }
+    .step-dot.active { background: #a0a0f8; }
+
+    /* ── CLASS CARDS ─────────────────────────────────────────── */
+    .class-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    .class-card {
+      padding: 1rem 0.5rem 0.75rem;
+      background: #0a0a14;
+      border: 1px solid #1e1e38;
+      cursor: pointer;
+      text-align: center;
+      transition: border-color 0.15s;
+    }
+    .class-card:hover { border-color: #3030a8; }
+    .class-card.selected { border-color: #a0a0f8; }
+    .class-icon { font-size: 1.6rem; margin-bottom: 0.4rem; }
+    .class-name { font-size: 0.7rem; letter-spacing: 0.15em; color: #8080b8; }
+    .class-card.selected .class-name { color: #c8c8f8; }
+
+    /* ── STAT PREVIEW ────────────────────────────────────────── */
+    .stat-block {
+      background: #0a0a14;
+      border: 1px solid #1e1e38;
+      padding: 0.75rem;
+      margin-bottom: 1rem;
+      display: none;
+    }
+    .stat-block.visible { display: block; }
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.3rem 0.5rem;
+    }
+    .stat-item { display: flex; justify-content: space-between; }
+    .stat-label { font-size: 0.7rem; color: #5050a0; }
+    .stat-val   { font-size: 0.7rem; color: #a0a0d8; }
+    .class-desc { font-size: 0.7rem; color: #5050a0; margin-bottom: 0.5rem; line-height: 1.6; }
+
+    /* ── APPEARANCE ──────────────────────────────────────────── */
+    .appear-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+    .appear-field label {
+      display: block;
+      font-size: 0.65rem;
+      letter-spacing: 0.15em;
+      color: #5050a0;
+      margin-bottom: 0.3rem;
+    }
+
+    /* ── CHARACTER CARDS ─────────────────────────────────────── */
+    .char-card {
+      background: #0a0a14;
+      border: 1px solid #1e1e38;
+      padding: 1rem;
+      margin-bottom: 0.5rem;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      transition: border-color 0.15s;
+    }
+    .char-card:hover { border-color: #3030a8; }
+    .char-name  { font-size: 0.95rem; color: #e0e0f8; margin-bottom: 0.2rem; }
+    .char-meta  { font-size: 0.7rem; color: #5050a0; }
+    .char-stats { font-size: 0.65rem; color: #3838a0; text-align: right; line-height: 1.8; }
+
+    .divider {
+      border: none;
+      border-top: 1px solid #1e1e38;
+      margin: 1.25rem 0;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SCREEN 1 — LOGIN / SIGNUP                                      -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="screen-auth" class="screen active">
+  <div class="panel">
+    <div class="game-title">BROWSER RPG PROTOTYPE</div>
+    <h1 id="auth-heading">Sign in</h1>
+
+    <div id="auth-msg" class="msg"></div>
+    <input type="email"    id="auth-email"    placeholder="Email address" />
+    <input type="password" id="auth-password" placeholder="Password" />
+    <button class="btn" onclick="handleAuth()">ENTER</button>
+    <button class="btn-ghost" onclick="toggleAuthMode()" id="auth-toggle">No account? Sign up</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SCREEN 2 — CHARACTER CREATION (3 steps)                        -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="screen-create" class="screen">
+  <div class="panel">
+    <div class="game-title">BROWSER RPG PROTOTYPE</div>
+    <h1>New Character</h1>
+
+    <div class="steps">
+      <div class="step-dot active"  id="dot-1"></div>
+      <div class="step-dot"         id="dot-2"></div>
+      <div class="step-dot"         id="dot-3"></div>
+    </div>
+
+    <!-- ── STEP 1: CLASS ── -->
+    <div id="step-1">
+      <h2>CHOOSE CLASS</h2>
+      <div class="class-grid">
+        <div class="class-card" id="card-warrior" onclick="selectClass('warrior')">
+          <div class="class-icon">⚔️</div>
+          <div class="class-name">WARRIOR</div>
+        </div>
+        <div class="class-card" id="card-archer" onclick="selectClass('archer')">
+          <div class="class-icon">🏹</div>
+          <div class="class-name">ARCHER</div>
+        </div>
+        <div class="class-card" id="card-mage" onclick="selectClass('mage')">
+          <div class="class-icon">🔮</div>
+          <div class="class-name">MAGE</div>
+        </div>
+      </div>
+
+      <div class="stat-block" id="stat-preview">
+        <div class="class-desc" id="class-desc"></div>
+        <div class="stat-grid">
+          <div class="stat-item"><span class="stat-label">STR</span><span class="stat-val" id="p-str">—</span></div>
+          <div class="stat-item"><span class="stat-label">DEX</span><span class="stat-val" id="p-dex">—</span></div>
+          <div class="stat-item"><span class="stat-label">INT</span><span class="stat-val" id="p-int">—</span></div>
+          <div class="stat-item"><span class="stat-label">VIT</span><span class="stat-val" id="p-vit">—</span></div>
+          <div class="stat-item"><span class="stat-label">AGI</span><span class="stat-val" id="p-agi">—</span></div>
+          <div class="stat-item"><span class="stat-label">LUK</span><span class="stat-val" id="p-luk">—</span></div>
+        </div>
+      </div>
+
+      <div id="msg-1" class="msg"></div>
+      <button class="btn" onclick="goStep(2)">NEXT</button>
+    </div>
+
+    <!-- ── STEP 2: NAME ── -->
+    <div id="step-2" style="display:none">
+      <h2>NAME YOUR CHARACTER</h2>
+      <input type="text" id="char-name" placeholder="Character name" maxlength="20" />
+      <div id="msg-2" class="msg"></div>
+      <button class="btn"       onclick="goStep(3)">NEXT</button>
+      <button class="btn-ghost" onclick="goStep(1)">BACK</button>
+    </div>
+
+    <!-- ── STEP 3: APPEARANCE ── -->
+    <div id="step-3" style="display:none">
+      <h2>APPEARANCE</h2>
+      <div class="appear-row">
+        <div class="appear-field">
+          <label>SKIN TONE</label>
+          <select id="skin-tone">
+            <option value="0">Light</option>
+            <option value="1">Medium</option>
+            <option value="2">Tan</option>
+            <option value="3">Dark</option>
+          </select>
+        </div>
+        <div class="appear-field">
+          <label>HAIR STYLE</label>
+          <select id="hair-style">
+            <option value="0">Short</option>
+            <option value="1">Long</option>
+            <option value="2">Spiky</option>
+            <option value="3">Bun</option>
+          </select>
+        </div>
+        <div class="appear-field">
+          <label>HAIR COLOR</label>
+          <select id="hair-color">
+            <option value="0">Black</option>
+            <option value="1">Brown</option>
+            <option value="2">Blonde</option>
+            <option value="3">Red</option>
+            <option value="4">White</option>
+            <option value="5">Blue</option>
+          </select>
+        </div>
+      </div>
+      <div id="msg-3" class="msg"></div>
+      <button class="btn"       onclick="createCharacter()">CREATE CHARACTER</button>
+      <button class="btn-ghost" onclick="goStep(2)">BACK</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SCREEN 3 — CHARACTER SELECT                                    -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="screen-select" class="screen">
+  <div class="panel">
+    <div class="game-title">BROWSER RPG PROTOTYPE</div>
+    <h1>Your Characters</h1>
+    <div id="char-list"></div>
+    <hr class="divider">
+    <button class="btn-ghost" onclick="startNewChar()">+ NEW CHARACTER</button>
+    <button class="btn-ghost" onclick="signOut()">SIGN OUT</button>
+  </div>
+</div>
+
+
+<script>
+// ══════════════════════════════════════════════════════════════════
+// CONFIG
+// ══════════════════════════════════════════════════════════════════
+const SUPABASE_URL  = 'https://qlehgpddqxkgdvfhwtdu.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFsZWhncGRkcXhrZ2R2Zmh3dGR1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIzMTgzODMsImV4cCI6MjEwNzg5NDM4M30.uNNdGVwReFk4pGmYETabbC9NfiWj08I8_-H5dcWm_gw';
+
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_ANON);
+
+// ══════════════════════════════════════════════════════════════════
+// STARTING STATS + CLASS DESCRIPTIONS
+// 20 points pre-allocated per class
+// ══════════════════════════════════════════════════════════════════
+const CLASS_DATA = {
+  warrior: {
+    stats: { strength:8, vitality:6, agility:3, dexterity:2, intelligence:0, luck:1 },
+    desc: 'High STR and VIT. Built to take hits and deal physical damage up close.'
+  },
+  archer: {
+    stats: { strength:2, vitality:1, agility:5, dexterity:8, intelligence:0, luck:4 },
+    desc: 'High DEX and AGI. Fast, evasive, deadly at range. LUK feeds crit chance.'
+  },
+  mage: {
+    stats: { strength:0, vitality:2, agility:1, dexterity:6, intelligence:8, luck:3 },
+    desc: 'High INT. Powerful magic damage and defence. DEX reduces cast time.'
+  }
+};
+
+// ══════════════════════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════════════════════
+let authMode      = 'signin';
+let selectedClass = null;
+
+// ══════════════════════════════════════════════════════════════════
+// SCREEN MANAGEMENT
+// ══════════════════════════════════════════════════════════════════
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// AUTH
+// ══════════════════════════════════════════════════════════════════
+function toggleAuthMode() {
+  authMode = authMode === 'signin' ? 'signup' : 'signin';
+  document.getElementById('auth-heading').textContent =
+    authMode === 'signin' ? 'Sign in' : 'Sign up';
+  document.getElementById('auth-toggle').textContent =
+    authMode === 'signin' ? 'No account? Sign up' : 'Have an account? Sign in';
+  document.getElementById('auth-msg').textContent = '';
+}
+
+async function handleAuth() {
+  const email    = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  const msgEl    = document.getElementById('auth-msg');
+  msgEl.className = 'msg';
+  msgEl.textContent = '';
+
+  if (!email || !password) {
+    msgEl.textContent = 'Email and password required.';
+    return;
+  }
+
+  let result;
+  if (authMode === 'signup') {
+    result = await db.auth.signUp({ email, password });
+  } else {
+    result = await db.auth.signInWithPassword({ email, password });
+  }
+
+  if (result.error) {
+    msgEl.textContent = result.error.message;
+    return;
+  }
+
+  if (authMode === 'signup') {
+    msgEl.className = 'msg ok';
+    msgEl.textContent = 'Account created — check your email to confirm, then sign in.';
+    return;
+  }
+
+  await afterLogin();
+}
+
+async function afterLogin() {
+  const { data: { session } } = await db.auth.getSession();
+  if (!session) return;
+
+  // fetch all characters this user owns
+  const { data: chars } = await db
+    .from('characters')
+    .select('*')
+    .eq('user_id', session.user.id)
+    .order('created_at', { ascending: true });
+
+  if (!chars || chars.length === 0) {
+    startNewChar();
+    showScreen('screen-create');
+  } else {
+    renderCharList(chars, session);
+    showScreen('screen-select');
+  }
+}
+
+async function signOut() {
+  await db.auth.signOut();
+  showScreen('screen-auth');
+}
+
+// ══════════════════════════════════════════════════════════════════
+// CHARACTER SELECT
+// ══════════════════════════════════════════════════════════════════
+function renderCharList(chars, session) {
+  const list = document.getElementById('char-list');
+  list.innerHTML = '';
+  chars.forEach(c => {
+    const card = document.createElement('div');
+    card.className = 'char-card';
+    const classIcons = { warrior:'⚔️', archer:'🏹', mage:'🔮' };
+    card.innerHTML = `
+      <div>
+        <div class="char-name">${classIcons[c.class] || ''} ${c.name}</div>
+        <div class="char-meta">${c.class.toUpperCase()} &nbsp;·&nbsp; Level ${c.level} &nbsp;·&nbsp; ${c.xp} XP</div>
+      </div>
+      <div class="char-stats">
+        STR ${c.strength} &nbsp; DEX ${c.dexterity}<br>
+        VIT ${c.vitality} &nbsp; AGI ${c.agility}<br>
+        INT ${c.intelligence} &nbsp; LUK ${c.luck}
+      </div>
+    `;
+    card.onclick = () => enterWorld(c, session);
+    list.appendChild(card);
+  });
+}
+
+function enterWorld(character, session) {
+  // hand off auth state to the game client via localStorage
+  // index.html reads these on load before opening the WebSocket
+  localStorage.setItem('rpg_token',      session.access_token);
+  localStorage.setItem('rpg_char_id',    character.id);
+  localStorage.setItem('rpg_char_name',  character.name);
+  localStorage.setItem('rpg_char_class', character.class);
+  window.location.href = 'index.html';
+}
+
+// ══════════════════════════════════════════════════════════════════
+// CHARACTER CREATION
+// ══════════════════════════════════════════════════════════════════
+function startNewChar() {
+  selectedClass = null;
+  document.querySelectorAll('.class-card').forEach(c => c.classList.remove('selected'));
+  document.getElementById('stat-preview').classList.remove('visible');
+  document.getElementById('char-name').value = '';
+  ['msg-1','msg-2','msg-3'].forEach(id => document.getElementById(id).textContent = '');
+  goStep(1);
+  showScreen('screen-create');
+}
+
+function goStep(n) {
+  // validate before advancing
+  if (n === 2 && !selectedClass) {
+    document.getElementById('msg-1').textContent = 'Choose a class to continue.';
+    return;
+  }
+  if (n === 3) {
+    const name = document.getElementById('char-name').value.trim();
+    if (!name || name.length < 2) {
+      document.getElementById('msg-2').textContent = 'Name must be at least 2 characters.';
+      return;
+    }
+    document.getElementById('msg-2').textContent = '';
+  }
+
+  // show the right step panel
+  [1,2,3].forEach(i => {
+    document.getElementById(`step-${i}`).style.display = i === n ? 'block' : 'none';
+    const dot = document.getElementById(`dot-${i}`);
+    dot.className = 'step-dot' + (i < n ? ' done' : i === n ? ' active' : '');
+  });
+}
+
+function selectClass(cls) {
+  selectedClass = cls;
+  document.querySelectorAll('.class-card').forEach(c => c.classList.remove('selected'));
+  document.getElementById(`card-${cls}`).classList.add('selected');
+
+  const { stats, desc } = CLASS_DATA[cls];
+  document.getElementById('p-str').textContent = stats.strength;
+  document.getElementById('p-dex').textContent = stats.dexterity;
+  document.getElementById('p-int').textContent = stats.intelligence;
+  document.getElementById('p-vit').textContent = stats.vitality;
+  document.getElementById('p-agi').textContent = stats.agility;
+  document.getElementById('p-luk').textContent = stats.luck;
+  document.getElementById('class-desc').textContent = desc;
+  document.getElementById('stat-preview').classList.add('visible');
+  document.getElementById('msg-1').textContent = '';
+}
+
+async function createCharacter() {
+  const errEl = document.getElementById('msg-3');
+  errEl.className = 'msg';
+  errEl.textContent = '';
+
+  const { data: { session } } = await db.auth.getSession();
+  if (!session) {
+    errEl.textContent = 'Session expired. Please sign in again.';
+    return;
+  }
+
+  const stats = CLASS_DATA[selectedClass].stats;
+
+  const { data, error } = await db
+    .from('characters')
+    .insert({
+      user_id:      session.user.id,
+      name:         document.getElementById('char-name').value.trim(),
+      class:        selectedClass,
+      level:        1,
+      xp:           0,
+      strength:     stats.strength,
+      dexterity:    stats.dexterity,
+      intelligence: stats.intelligence,
+      vitality:     stats.vitality,
+      agility:      stats.agility,
+      luck:         stats.luck,
+      skin_tone:    parseInt(document.getElementById('skin-tone').value),
+      hair_style:   parseInt(document.getElementById('hair-style').value),
+      hair_color:   parseInt(document.getElementById('hair-color').value)
+    })
+    .select()
+    .single();
+
+  if (error) {
+    errEl.textContent = error.message.includes('unique')
+      ? 'That name is already taken.'
+      : error.message;
+    return;
+  }
+
+  // go straight into the game with the new character
+  enterWorld(data, session);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// INIT — check for existing session on page load
+// If already logged in, skip the login screen
+// ══════════════════════════════════════════════════════════════════
+(async () => {
+  const { data: { session } } = await db.auth.getSession();
+  if (session) {
+    await afterLogin();
+  }
+})();
+</script>
+</body>
+</html>
