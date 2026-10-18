@@ -605,6 +605,9 @@ function enterWorld(character, session) {
   localStorage.setItem('rpg_char_id',    character.id);
   localStorage.setItem('rpg_char_name',  character.name);
   localStorage.setItem('rpg_char_class', character.class);
+  localStorage.setItem('rpg_skin_tone',  character.skin_tone  ?? 0);
+  localStorage.setItem('rpg_hair_style', character.hair_style ?? 0);
+  localStorage.setItem('rpg_hair_color', character.hair_color ?? 0);
   window.location.href = 'index.html';
 }
 

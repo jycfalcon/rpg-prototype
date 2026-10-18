@@ -92,6 +92,70 @@
   #storage-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 3px; padding: 10px; }
   .storage-slot { width: 100%; aspect-ratio: 1; background: #0a0a14; border: 1px solid #1a1a30; }
 
+  /* ── INVENTORY ────────────────────────────────────────────────────────── */
+  #inventory-panel {
+    display: none; position: fixed; inset: 0; z-index: 400;
+    background: rgba(4,4,12,0.97); font-family: 'Courier New', monospace;
+    color: #c8c8d8; flex-direction: column;
+  }
+  .inv-wrap { display:flex; flex-direction:column; height:100%; max-width:980px; margin:0 auto; padding:14px 16px; }
+  .inv-header { display:flex; justify-content:space-between; align-items:center; padding-bottom:10px; border-bottom:1px solid #1e1e38; margin-bottom:12px; }
+  .inv-title { font-size:12px; letter-spacing:0.22em; color:#e0dff8; }
+  .inv-subtitle { font-size:9px; color:#404080; letter-spacing:0.12em; }
+  .inv-close { cursor:pointer; color:#404080; font-size:20px; padding:2px 8px; transition:color 0.15s; line-height:1; }
+  .inv-close:hover { color:#e0dff8; }
+  .inv-body { display:flex; gap:14px; flex:1; min-height:0; }
+  /* left */
+  .inv-left { width:320px; flex-shrink:0; display:flex; flex-direction:column; gap:10px; }
+  .inv-gear-area { background:#0a0a14; border:1px solid #1e1e38; padding:12px 10px; display:flex; flex-direction:column; align-items:center; gap:5px; }
+  .inv-section-label { font-size:7px; color:#303060; letter-spacing:0.22em; margin-bottom:4px; }
+  .inv-gear-row { display:flex; align-items:center; gap:5px; }
+  .inv-spacer { width:52px; height:52px; flex-shrink:0; }
+  .inv-slot {
+    width:52px; height:52px; background:#0d0d1e; border:1px solid #202040;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    cursor:pointer; flex-shrink:0; transition:border-color 0.15s; position:relative;
+  }
+  .inv-slot:hover { border-color:#4040a0; }
+  .inv-slot.has-item { border-color:#303080; }
+  .inv-slot.has-item:hover { border-color:#6060c0; }
+  .inv-slot-icon { font-size:17px; opacity:0.25; pointer-events:none; }
+  .inv-slot.has-item .inv-slot-icon { opacity:1; }
+  .inv-slot-label { font-size:6px; color:#282860; letter-spacing:0.1em; margin-top:1px; pointer-events:none; }
+  .inv-slot.has-item .inv-slot-label { color:#5050a0; }
+  .inv-char-wrap { width:96px; height:144px; background:#0a0a14; border:1px solid #181830; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  #inv-char-canvas { image-rendering:pixelated; image-rendering:crisp-edges; display:block; }
+  .inv-stats { background:#0a0a14; border:1px solid #1e1e38; padding:10px; flex:1; overflow-y:auto; }
+  .inv-stat-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:3px 6px; margin-bottom:4px; }
+  .inv-stat-row { display:flex; justify-content:space-between; }
+  .inv-sk { font-size:8px; color:#303868; }
+  .inv-sv { font-size:8px; color:#9090d0; }
+  .inv-divider { border:none; border-top:1px solid #1a1a2e; margin:6px 0; }
+  /* right */
+  .inv-right { flex:1; display:flex; flex-direction:column; gap:8px; min-width:0; }
+  .inv-grid-label { font-size:8px; color:#303060; letter-spacing:0.18em; }
+  .inv-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:4px; align-content:start; }
+  .inv-item { aspect-ratio:1; background:#0a0a14; border:1px solid #181830; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:15px; transition:border-color 0.12s; }
+  .inv-item:hover { border-color:#4040a0; }
+  .inv-item.filled { border-color:#252550; }
+  .inv-item.filled:hover { border-color:#6060c0; }
+  .inv-empty { aspect-ratio:1; background:#080810; border:1px solid #111124; }
+  .inv-hint { font-size:8px; color:#181830; text-align:center; padding-top:6px; }
+  /* tooltip */
+  #inv-tooltip {
+    display:none; position:fixed; z-index:600; background:#08080f; border:1px solid #3030a0;
+    padding:8px 10px; font-family:'Courier New',monospace; font-size:9px; color:#c8c8d8;
+    pointer-events:none; max-width:210px; line-height:1.75;
+  }
+  .tt-name { font-size:11px; color:#e0dff8; margin-bottom:3px; letter-spacing:0.05em; }
+  .tt-meta { color:#404080; margin-bottom:4px; font-size:8px; }
+  .tt-stat { color:#7090d8; }
+  @media (max-width:768px) {
+    .inv-body { flex-direction:column; overflow-y:auto; }
+    .inv-left { width:100%; }
+    .inv-grid { grid-template-columns:repeat(5,1fr); }
+  }
+
   @media (max-width: 768px) {
     #party-panel { width: 138px; top: 120px; }
     #chat-panel  { width: 170px; bottom: 88px; }
@@ -173,6 +237,108 @@
 <!-- MAP FADE OVERLAY -->
 <div id="map-fade"></div>
 
+<!-- INVENTORY PANEL -->
+<div id="inventory-panel">
+  <div class="inv-wrap">
+
+    <!-- Header -->
+    <div class="inv-header">
+      <div>
+        <div class="inv-title">INVENTORY</div>
+        <div class="inv-subtitle" id="inv-char-label"></div>
+      </div>
+      <div class="inv-close" onclick="closeInventory()">✕</div>
+    </div>
+
+    <div class="inv-body">
+
+      <!-- LEFT: gear slots + stats -->
+      <div class="inv-left">
+
+        <div class="inv-gear-area">
+          <div class="inv-section-label">EQUIPMENT</div>
+
+          <!-- row 1: head -->
+          <div class="inv-gear-row">
+            <div class="inv-spacer"></div>
+            <div class="inv-slot" id="slot-headgear" title="Headgear" ondblclick="unequipSlot('headgear')">
+              <span class="inv-slot-icon">🪖</span>
+              <span class="inv-slot-label">HEAD</span>
+            </div>
+            <div class="inv-spacer"></div>
+          </div>
+
+          <!-- row 2: weapon + sprite + body -->
+          <div class="inv-gear-row">
+            <div class="inv-slot" id="slot-weapon" title="Weapon" ondblclick="unequipSlot('weapon')">
+              <span class="inv-slot-icon">⚔️</span>
+              <span class="inv-slot-label">WEAPON</span>
+            </div>
+            <div class="inv-char-wrap">
+              <canvas id="inv-char-canvas" width="96" height="144"></canvas>
+            </div>
+            <div class="inv-slot" id="slot-body" title="Body armor" ondblclick="unequipSlot('body')">
+              <span class="inv-slot-icon">🥋</span>
+              <span class="inv-slot-label">BODY</span>
+            </div>
+          </div>
+
+          <!-- row 3: legs -->
+          <div class="inv-gear-row">
+            <div class="inv-spacer"></div>
+            <div class="inv-slot" id="slot-leg" title="Leg armor" ondblclick="unequipSlot('leg')">
+              <span class="inv-slot-icon">👖</span>
+              <span class="inv-slot-label">LEGS</span>
+            </div>
+            <div class="inv-spacer"></div>
+          </div>
+
+          <!-- row 4: acc1 + boots + acc2 -->
+          <div class="inv-gear-row">
+            <div class="inv-slot" id="slot-accessory1" title="Accessory 1" ondblclick="unequipSlot('accessory1')">
+              <span class="inv-slot-icon">💍</span>
+              <span class="inv-slot-label">ACC 1</span>
+            </div>
+            <div class="inv-slot" id="slot-boots" title="Boots" ondblclick="unequipSlot('boots')">
+              <span class="inv-slot-icon">👟</span>
+              <span class="inv-slot-label">BOOTS</span>
+            </div>
+            <div class="inv-slot" id="slot-accessory2" title="Accessory 2" ondblclick="unequipSlot('accessory2')">
+              <span class="inv-slot-icon">💍</span>
+              <span class="inv-slot-label">ACC 2</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="inv-stats">
+          <div class="inv-section-label">BASE STATS</div>
+          <div class="inv-stat-grid" id="inv-base-stats"></div>
+          <hr class="inv-divider">
+          <div class="inv-section-label">DERIVED</div>
+          <div class="inv-stat-grid" id="inv-derived-stats"></div>
+        </div>
+
+      </div><!-- /inv-left -->
+
+      <!-- RIGHT: inventory grid -->
+      <div class="inv-right">
+        <div class="inv-grid-label" id="inv-grid-label">INVENTORY (0 / 30)</div>
+        <div class="inv-grid" id="inv-grid"></div>
+        <div class="inv-hint">[B] bag &nbsp;·&nbsp; [ESC] close &nbsp;·&nbsp; Double-click to equip / unequip</div>
+      </div>
+
+    </div><!-- /inv-body -->
+  </div><!-- /inv-wrap -->
+</div><!-- /inventory-panel -->
+
+<!-- ITEM TOOLTIP -->
+<div id="inv-tooltip">
+  <div class="tt-name" id="tt-name"></div>
+  <div class="tt-meta" id="tt-meta"></div>
+  <div id="tt-stats"></div>
+</div>
+
 <script>
 'use strict';
 
@@ -216,6 +382,13 @@ const TOWN_NPCS = {
 // warrior vit=6 → 32,  archer vit=1 → 22,  mage vit=3 → 26
 const CLASS_MAX_HP = { warrior: 32, archer: 22, mage: 26 };
 let playerMaxHp = CLASS_MAX_HP[rpg_char_class] || 32;
+
+// Starting stats per class — used for inventory stat display until server sends real data
+const CLASS_STARTING_STATS = {
+  warrior: { strength:8, vitality:6, agility:3, dexterity:2, intelligence:0, luck:1 },
+  archer:  { strength:2, vitality:1, agility:5, dexterity:8, intelligence:0, luck:4 },
+  mage:    { strength:0, vitality:3, agility:1, dexterity:6, intelligence:10, luck:0 },
+};
 
 // ── GAME CONSTANTS ────────────────────────────────────────────────────────
 const P_SPEED=130, P_ATK=3, P_REGEN=1;
@@ -358,6 +531,9 @@ connectWS();
 let currentMap = 'town';
 let mapW = TOWN_W, mapH = TOWN_H;
 let nearbyNpc = null, returnPortalNearby = false;
+let inventoryOpen = false;
+let equipped = { headgear:null, weapon:null, body:null, leg:null, boots:null, accessory1:null, accessory2:null };
+let inventory = []; // populated when item drops are built
 
 let cam = { x: TOWN_SPAWN_X - window.innerWidth/2, y: TOWN_SPAWN_Y - window.innerHeight/2 };
 let keys = {};
@@ -429,14 +605,24 @@ window.addEventListener('keydown', e => {
       dx+=joy.dx;dy+=joy.dy;startRoll(dx,dy);
     }
     // E = interact with nearby NPC or return portal
-    if (k === 'e' && !player.dead) {
+    if (k === 'e' && !player.dead && !inventoryOpen) {
       if (nearbyNpc) triggerInteract(nearbyNpc);
       else if (returnPortalNearby) openWorldMap();
+    }
+    // B = toggle inventory bag
+    if (k === 'b') {
+      inventoryOpen ? closeInventory() : openInventory();
+    }
+    // Escape = close any open panel
+    if (k === 'escape') {
+      if (inventoryOpen) closeInventory();
+      else closeWorldMap();
+      closeStoragePanel();
     }
   }
   keys[k] = true;
   if(['arrowup','arrowdown','arrowleft','arrowright'].includes(k))e.preventDefault();
-  if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k))autoMove=false;
+  if(!inventoryOpen&&['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k))autoMove=false;
 });
 window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
 
@@ -506,6 +692,7 @@ function spawnCracks(cx,cy,radius){
 // ── UPDATE ────────────────────────────────────────────────────────────────
 let last = 0;
 function update(dt) {
+  if (inventoryOpen) return; // no movement/combat while bag is open
   if (player.dead) return;
   if (stunned) { stunTimer-=dt; if(stunTimer<=0){stunned=false;stunTimer=0;} }
   if (targetSlime&&!targetSlime.alive){targetSlime=null;autoMove=false;}
@@ -1259,6 +1446,212 @@ function openStoragePanel(){
 }
 function closeStoragePanel(){
   document.getElementById('storage-panel').style.display = 'none';
+}
+
+// ── INVENTORY ─────────────────────────────────────────────────────────────
+function openInventory() {
+  inventoryOpen = true;
+  // Close other panels
+  closeWorldMap(); closeStoragePanel();
+  document.getElementById('inventory-panel').style.display = 'flex';
+
+  // Label
+  const charClass = rpg_char_class.charAt(0).toUpperCase() + rpg_char_class.slice(1);
+  const lbl = document.getElementById('inv-char-label');
+  if (lbl) lbl.textContent = `${rpg_char_name}  ·  ${charClass}  ·  Lv 1`;
+
+  refreshInventoryUI();
+}
+
+function closeInventory() {
+  inventoryOpen = false;
+  document.getElementById('inventory-panel').style.display = 'none';
+  hideTooltip();
+}
+
+// ── Derived stats from base + equipped gear ────────────────────────────────
+function getBaseStats() {
+  const base = { ...(CLASS_STARTING_STATS[rpg_char_class] || CLASS_STARTING_STATS.warrior) };
+  // Add flat stat bonuses from equipped items
+  for (const item of Object.values(equipped)) {
+    if (!item || !item.stats) continue;
+    for (const key of ['strength','dexterity','intelligence','vitality','agility','luck']) {
+      if (item.stats[key]) base[key] = (base[key] || 0) + item.stats[key];
+    }
+  }
+  return base;
+}
+
+function computeDerived(s) {
+  const baseHp = 20; // level 1 base (20 + (lv-1)*5)
+  const maxHp  = Math.floor(baseHp * (1 + s.vitality * 0.1));
+  const wAtk   = equipped.weapon?.stats?.atk  || 0;
+  const wMatk  = equipped.weapon?.stats?.matk || 0;
+  return {
+    'HP':   maxHp,
+    'ATK':  wAtk  + Math.floor(s.strength    * 0.5),
+    'MATK': wMatk + Math.floor(s.intelligence * 0.5),
+    'DEF':  Math.floor(s.vitality * 1.5),
+    'HIT':  s.dexterity * 2,
+    'FLEE': s.agility   * 2,
+    'CRIT': Math.floor(s.luck * 0.5) + '%',
+    'ASPD': 100 + Math.floor(s.agility * 2),
+  };
+}
+
+// ── Render inventory UI ────────────────────────────────────────────────────
+function refreshInventoryUI() {
+  // Character sprite
+  const canvas = document.getElementById('inv-char-canvas');
+  if (canvas) {
+    const sk = parseInt(localStorage.getItem('rpg_skin_tone')  || '0');
+    const hs = parseInt(localStorage.getItem('rpg_hair_style') || '0');
+    const hc = parseInt(localStorage.getItem('rpg_hair_color') || '0');
+    drawSprite(canvas, sk, hs, hc, rpg_char_class, 3);
+  }
+
+  // Gear slots
+  const SLOT_META = {
+    headgear:   { icon:'🪖', lbl:'HEAD'   },
+    weapon:     { icon:'⚔️',  lbl:'WEAPON' },
+    body:       { icon:'🥋',  lbl:'BODY'   },
+    leg:        { icon:'👖',  lbl:'LEGS'   },
+    boots:      { icon:'👟',  lbl:'BOOTS'  },
+    accessory1: { icon:'💍',  lbl:'ACC 1'  },
+    accessory2: { icon:'💍',  lbl:'ACC 2'  },
+  };
+  for (const [key, meta] of Object.entries(SLOT_META)) {
+    const el = document.getElementById(`slot-${key}`);
+    if (!el) continue;
+    const item = equipped[key];
+    el.classList.toggle('has-item', !!item);
+    const iconEl  = el.querySelector('.inv-slot-icon');
+    const labelEl = el.querySelector('.inv-slot-label');
+    if (iconEl)  iconEl.textContent  = item ? itemIcon(item) : meta.icon;
+    if (labelEl) labelEl.textContent = item ? item.name.slice(0, 7) : meta.lbl;
+    // Tooltip on slot hover
+    el.onmouseenter = item ? (e => showTooltip(e, item)) : null;
+    el.onmouseleave = item ? hideTooltip : null;
+    el.onmousemove  = item ? moveTooltip  : null;
+  }
+
+  // Base stats
+  const base = getBaseStats();
+  const baseEl = document.getElementById('inv-base-stats');
+  if (baseEl) {
+    const entries = [
+      ['STR', base.strength], ['VIT', base.vitality], ['DEX', base.dexterity],
+      ['AGI', base.agility],  ['INT', base.intelligence], ['LUK', base.luck],
+    ];
+    baseEl.innerHTML = entries.map(([k,v]) =>
+      `<div class="inv-stat-row"><span class="inv-sk">${k}</span><span class="inv-sv">${v}</span></div>`
+    ).join('');
+  }
+
+  // Derived stats
+  const derived = computeDerived(base);
+  const drvEl = document.getElementById('inv-derived-stats');
+  if (drvEl) {
+    drvEl.innerHTML = Object.entries(derived).map(([k,v]) =>
+      `<div class="inv-stat-row"><span class="inv-sk">${k}</span><span class="inv-sv">${v}</span></div>`
+    ).join('');
+  }
+
+  // Inventory grid
+  renderInventoryGrid();
+}
+
+function renderInventoryGrid() {
+  const grid = document.getElementById('inv-grid');
+  if (!grid) return;
+  const TOTAL = 30;
+  grid.innerHTML = '';
+
+  for (let i = 0; i < TOTAL; i++) {
+    const item = inventory[i] || null;
+    const slot = document.createElement('div');
+    if (item) {
+      slot.className = 'inv-item filled';
+      slot.textContent = itemIcon(item);
+      slot.dataset.idx = i;
+      slot.addEventListener('dblclick', () => equipFromInventory(i));
+      slot.addEventListener('mouseenter', e => showTooltip(e, item));
+      slot.addEventListener('mouseleave', hideTooltip);
+      slot.addEventListener('mousemove',  moveTooltip);
+    } else {
+      slot.className = 'inv-item';
+    }
+    grid.appendChild(slot);
+  }
+
+  const lbl = document.getElementById('inv-grid-label');
+  if (lbl) lbl.textContent = `INVENTORY (${inventory.length} / ${TOTAL})`;
+}
+
+// ── Equip / unequip ────────────────────────────────────────────────────────
+function equipFromInventory(idx) {
+  const item = inventory[idx];
+  if (!item) return;
+
+  let slotKey = item.slot;
+  if (slotKey === 'accessory') {
+    slotKey = !equipped.accessory1 ? 'accessory1' : 'accessory2';
+  }
+
+  // Swap existing into inventory at same index, or just remove
+  if (equipped[slotKey]) {
+    inventory[idx] = equipped[slotKey];
+  } else {
+    inventory.splice(idx, 1);
+  }
+  equipped[slotKey] = item;
+  refreshInventoryUI();
+}
+
+function unequipSlot(slotKey) {
+  const item = equipped[slotKey];
+  if (!item) return;
+  if (inventory.length >= 30) {
+    addFloat(player.x, player.y - 50, 'INVENTORY FULL', '#e74c3c', 12);
+    return;
+  }
+  inventory.push(item);
+  equipped[slotKey] = null;
+  refreshInventoryUI();
+}
+
+// ── Tooltip ────────────────────────────────────────────────────────────────
+function showTooltip(e, item) {
+  const tt = document.getElementById('inv-tooltip');
+  if (!tt || !item) return;
+  document.getElementById('tt-name').textContent = item.name || 'Unknown';
+  document.getElementById('tt-meta').textContent =
+    `${(item.slot||'').toUpperCase()} — ${(item.subtype||'').toUpperCase()}`;
+  const stats = item.stats || {};
+  document.getElementById('tt-stats').innerHTML = Object.keys(stats).length
+    ? Object.entries(stats).map(([k,v]) => `<div class="tt-stat">+${v} ${k.toUpperCase()}</div>`).join('')
+    : '<div style="color:#303060">No stats</div>';
+  tt.style.display = 'block';
+  moveTooltip(e);
+}
+
+function hideTooltip() {
+  const tt = document.getElementById('inv-tooltip');
+  if (tt) tt.style.display = 'none';
+}
+
+function moveTooltip(e) {
+  const tt = document.getElementById('inv-tooltip');
+  if (!tt || tt.style.display === 'none') return;
+  const x = Math.min(e.clientX + 14, window.innerWidth  - tt.offsetWidth  - 8);
+  const y = Math.min(e.clientY - 10, window.innerHeight - tt.offsetHeight - 8);
+  tt.style.left = x + 'px'; tt.style.top = y + 'px';
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function itemIcon(item) {
+  const icons = { sword:'⚔️', bow:'🏹', staff:'🔮', headgear:'🪖', body:'🥋', leg:'👖', boots:'👟', accessory:'💍' };
+  return icons[item.subtype] || icons[item.slot] || '◈';
 }
 
 </script>
