@@ -147,7 +147,17 @@ c.addEventListener('touchstart',e=>{
   for(const t of e.changedTouches){
     const{x,y}=touchPos(t);const atk=getAtkBtn(),roll=getRollBtn();
     if(Math.hypot(x-roll.x,y-roll.y)<roll.r+14){rollBtnFlash=0.2;rollBtnTouchId=t.identifier;startRoll(joy.dx,joy.dy);continue;}
-    if(Math.hypot(x-atk.x,y-atk.y)<atk.r+16){triggerAttackOnTarget();atkBtnFlash=0.2;atkBtnHeld=true;atkBtnTouchId=t.identifier;continue;}
+    if(Math.hypot(x-atk.x,y-atk.y)<atk.r+16){
+      // Auto-target nearest slime if nothing selected
+      if(!targetSlime||!targetSlime.alive){
+        let nearest=null,nearestDist=Infinity;
+        for(const s of slimes){if(!s.alive)continue;const d=Math.hypot(s.x-player.x,s.y-player.y);if(d<nearestDist){nearest=s;nearestDist=d;}}
+        if(nearest){nearest.state='aggro';targetSlime=nearest;autoMove=true;autoAttackedOnce=false;}
+      }
+      autoAttackedOnce=true;  // bypass the approach-first gate for manual ATK
+      triggerAttackOnTarget();
+      atkBtnFlash=0.2;atkBtnHeld=true;atkBtnTouchId=t.identifier;continue;
+    }
     const wx=x+cam.x,wy=y+cam.y;
     let tapped=false;
     for(const s of slimes){if(!s.alive)continue;if(Math.hypot(wx-s.x,wy-s.y)<s.r+18){pickTarget(wx,wy);tapped=true;break;}}
@@ -234,7 +244,7 @@ function update(dt){
       if(Math.abs(dx)>=Math.abs(dy))player.facing=dx>0?'right':'left';else player.facing=dy>0?'down':'up';
     }else if(!autoAttackedOnce&&player.atkCd<=0){triggerAttackOnTarget();autoAttackedOnce=true;autoMove=false;}
   }
-  if((mouseDown||atkBtnHeld)&&autoAttackedOnce&&player.atkCd<=0&&targetSlime&&!rolling) triggerAttackOnTarget();
+  if((mouseDown||atkBtnHeld)&&player.atkCd<=0&&targetSlime&&!rolling) triggerAttackOnTarget();
 
   // Manual movement
   if(!rolling&&!autoMove){
