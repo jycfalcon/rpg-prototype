@@ -94,62 +94,67 @@
 
   /* ── INVENTORY ────────────────────────────────────────────────────────── */
   #inventory-panel {
-    display: none; position: fixed; inset: 0; z-index: 400;
-    background: rgba(4,4,12,0.97); font-family: 'Courier New', monospace;
-    color: #c8c8d8; flex-direction: column;
+    display:none; position:fixed; inset:0; z-index:400;
+    background:rgba(8,8,20,0.97); font-family:'Courier New',monospace;
+    color:#d0d0f0; flex-direction:column;
   }
-  .inv-wrap { display:flex; flex-direction:column; height:100%; max-width:980px; margin:0 auto; padding:14px 16px; }
-  .inv-header { display:flex; justify-content:space-between; align-items:center; padding-bottom:10px; border-bottom:1px solid #1e1e38; margin-bottom:12px; }
-  .inv-title { font-size:12px; letter-spacing:0.22em; color:#e0dff8; }
-  .inv-subtitle { font-size:9px; color:#404080; letter-spacing:0.12em; }
-  .inv-close { cursor:pointer; color:#404080; font-size:20px; padding:2px 8px; transition:color 0.15s; line-height:1; }
-  .inv-close:hover { color:#e0dff8; }
-  .inv-body { display:flex; gap:14px; flex:1; min-height:0; }
-  /* left */
-  .inv-left { width:320px; flex-shrink:0; display:flex; flex-direction:column; gap:10px; }
-  .inv-gear-area { background:#0a0a14; border:1px solid #1e1e38; padding:12px 10px; display:flex; flex-direction:column; align-items:center; gap:5px; }
-  .inv-section-label { font-size:7px; color:#303060; letter-spacing:0.22em; margin-bottom:4px; }
-  .inv-gear-row { display:flex; align-items:center; gap:5px; }
-  .inv-spacer { width:52px; height:52px; flex-shrink:0; }
+  .inv-wrap { display:flex; flex-direction:column; height:100%; max-width:1000px; margin:0 auto; padding:16px 20px; }
+  .inv-header { display:flex; justify-content:space-between; align-items:center; padding-bottom:12px; border-bottom:1px solid #3a3a80; margin-bottom:14px; }
+  .inv-title { font-size:13px; letter-spacing:0.25em; color:#ffffff; }
+  .inv-subtitle { font-size:10px; color:#9090cc; letter-spacing:0.12em; margin-top:3px; }
+  .inv-close { cursor:pointer; color:#8888cc; font-size:22px; padding:2px 10px; transition:color 0.15s; line-height:1; }
+  .inv-close:hover { color:#ffffff; }
+  .inv-body { display:flex; gap:16px; flex:1; min-height:0; }
+  /* left panel */
+  .inv-left { width:340px; flex-shrink:0; display:flex; flex-direction:column; gap:12px; }
+  .inv-section-label { font-size:9px; color:#9090cc; letter-spacing:0.2em; margin-bottom:8px; }
+  .inv-gear-area { background:#111130; border:1px solid #3a3a80; padding:14px 12px; display:flex; flex-direction:column; align-items:center; gap:6px; }
+  .inv-gear-row { display:flex; align-items:center; gap:6px; }
+  .inv-spacer { width:56px; height:56px; flex-shrink:0; }
   .inv-slot {
-    width:52px; height:52px; background:#0d0d1e; border:1px solid #202040;
+    width:56px; height:56px; background:#0c0c25; border:1px solid #3a3a70;
     display:flex; flex-direction:column; align-items:center; justify-content:center;
-    cursor:pointer; flex-shrink:0; transition:border-color 0.15s; position:relative;
+    cursor:pointer; flex-shrink:0; transition:border-color 0.15s;
   }
-  .inv-slot:hover { border-color:#4040a0; }
-  .inv-slot.has-item { border-color:#303080; }
-  .inv-slot.has-item:hover { border-color:#6060c0; }
-  .inv-slot-icon { font-size:17px; opacity:0.25; pointer-events:none; }
+  .inv-slot:hover { border-color:#7070d0; background:#14143a; }
+  .inv-slot.has-item { border-color:#5555c0; background:#0e0e30; }
+  .inv-slot.has-item:hover { border-color:#9090f0; }
+  .inv-slot-icon { font-size:20px; opacity:0.3; pointer-events:none; }
   .inv-slot.has-item .inv-slot-icon { opacity:1; }
-  .inv-slot-label { font-size:6px; color:#282860; letter-spacing:0.1em; margin-top:1px; pointer-events:none; }
-  .inv-slot.has-item .inv-slot-label { color:#5050a0; }
-  .inv-char-wrap { width:96px; height:144px; background:#0a0a14; border:1px solid #181830; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .inv-slot-label { font-size:7px; color:#6868b0; letter-spacing:0.08em; margin-top:2px; pointer-events:none; }
+  .inv-slot.has-item .inv-slot-label { color:#b0b0f0; }
+  .inv-char-wrap { width:96px; height:144px; background:#0c0c25; border:1px solid #3a3a70; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
   #inv-char-canvas { image-rendering:pixelated; image-rendering:crisp-edges; display:block; }
-  .inv-stats { background:#0a0a14; border:1px solid #1e1e38; padding:10px; flex:1; overflow-y:auto; }
-  .inv-stat-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:3px 6px; margin-bottom:4px; }
-  .inv-stat-row { display:flex; justify-content:space-between; }
-  .inv-sk { font-size:8px; color:#303868; }
-  .inv-sv { font-size:8px; color:#9090d0; }
-  .inv-divider { border:none; border-top:1px solid #1a1a2e; margin:6px 0; }
-  /* right */
-  .inv-right { flex:1; display:flex; flex-direction:column; gap:8px; min-width:0; }
-  .inv-grid-label { font-size:8px; color:#303060; letter-spacing:0.18em; }
-  .inv-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:4px; align-content:start; }
-  .inv-item { aspect-ratio:1; background:#0a0a14; border:1px solid #181830; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:15px; transition:border-color 0.12s; }
-  .inv-item:hover { border-color:#4040a0; }
-  .inv-item.filled { border-color:#252550; }
-  .inv-item.filled:hover { border-color:#6060c0; }
-  .inv-empty { aspect-ratio:1; background:#080810; border:1px solid #111124; }
-  .inv-hint { font-size:8px; color:#181830; text-align:center; padding-top:6px; }
+  /* stats */
+  .inv-stats { background:#111130; border:1px solid #3a3a80; padding:12px; flex:1; overflow-y:auto; }
+  .inv-stat-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:5px 10px; margin-bottom:6px; }
+  .inv-stat-row { display:flex; justify-content:space-between; padding:2px 0; }
+  .inv-sk { font-size:9px; color:#9090cc; }
+  .inv-sv { font-size:9px; color:#e8e8ff; font-weight:bold; }
+  .inv-divider { border:none; border-top:1px solid #3a3a70; margin:8px 0; }
+  /* right panel */
+  .inv-right { flex:1; display:flex; flex-direction:column; gap:10px; min-width:0; }
+  .inv-grid-label { font-size:9px; color:#9090cc; letter-spacing:0.18em; }
+  .inv-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:5px; align-content:start; }
+  .inv-item {
+    aspect-ratio:1; background:#0c0c25; border:1px solid #2e2e60;
+    cursor:pointer; display:flex; align-items:center; justify-content:center;
+    font-size:18px; transition:border-color 0.12s, background 0.12s; min-height:46px;
+  }
+  .inv-item:hover { border-color:#6060c0; background:#141440; }
+  .inv-item.filled { border-color:#4545a0; }
+  .inv-item.filled:hover { border-color:#8080f0; }
+  .inv-hint { font-size:8px; color:#4040a0; text-align:center; padding-top:6px; }
   /* tooltip */
   #inv-tooltip {
-    display:none; position:fixed; z-index:600; background:#08080f; border:1px solid #3030a0;
-    padding:8px 10px; font-family:'Courier New',monospace; font-size:9px; color:#c8c8d8;
-    pointer-events:none; max-width:210px; line-height:1.75;
+    display:none; position:fixed; z-index:600; background:#0e0e28;
+    border:1px solid #5050b0; padding:10px 12px;
+    font-family:'Courier New',monospace; font-size:9px; color:#c8c8f0;
+    pointer-events:none; max-width:220px; line-height:1.8;
   }
-  .tt-name { font-size:11px; color:#e0dff8; margin-bottom:3px; letter-spacing:0.05em; }
-  .tt-meta { color:#404080; margin-bottom:4px; font-size:8px; }
-  .tt-stat { color:#7090d8; }
+  .tt-name { font-size:11px; color:#ffffff; margin-bottom:4px; letter-spacing:0.05em; }
+  .tt-meta { color:#8080c0; margin-bottom:5px; font-size:8px; }
+  .tt-stat { color:#90c0ff; }
   /* Bag button */
   #bag-btn {
     position:fixed; top:10px; right:148px; z-index:200;
@@ -1476,6 +1481,41 @@ function openStoragePanel(){
 }
 function closeStoragePanel(){
   document.getElementById('storage-panel').style.display = 'none';
+}
+
+// ── SPRITE RENDERER ────────────────────────────────────────────────────────
+// Used by inventory to draw the character preview
+const SKIN_PAL = ['#FFD0A0','#E8A870','#C88040','#8B5523'];
+const HAIR_PAL = ['#1A1818','#6B3A2A','#D4B830','#B02020','#D8D8E0','#1830C0'];
+const CLASS_SHIRT = { warrior:'#7A1820', archer:'#1A6020', mage:'#1A1878' };
+
+function drawSprite(canvas, skinIdx, hairIdx, hairColIdx, cls, scale) {
+  const S = scale || 4;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const sk = SKIN_PAL[skinIdx]    || SKIN_PAL[0];
+  const hr = HAIR_PAL[hairColIdx] || HAIR_PAL[0];
+  const sh = CLASS_SHIRT[cls]     || '#404870';
+  const pt = '#242438', bt = '#3A2810', dk = '#080808', wh = '#F0F0F8';
+
+  const r = (x,y,w,h,c) => { ctx.fillStyle=c; ctx.fillRect(x*S,y*S,w*S,h*S); };
+
+  switch(hairIdx) {
+    case 0: r(11,1,10,5,hr); r(10,4,1,4,hr); r(21,4,1,4,hr); break;
+    case 1: r(10,1,12,5,hr); r(8,4,3,14,hr); r(21,4,3,14,hr); break;
+    case 2: r(11,0,2,6,hr); r(14,1,2,5,hr); r(17,0,2,6,hr); r(10,3,1,4,hr); r(21,3,1,4,hr); break;
+    case 3: r(11,2,10,4,hr); r(13,0,6,5,hr); break;
+  }
+  r(11,4,10,9,sk); r(9,6,2,4,sk); r(21,6,2,4,sk);
+  r(12,7,2,2,dk); r(18,7,2,2,dk); r(12,7,1,1,wh); r(18,7,1,1,wh);
+  r(14,11,4,1,'#A04848');
+  r(14,13,4,3,sk);
+  r(9,16,14,10,sh); r(6,16,3,10,sh); r(23,16,3,10,sh);
+  r(6,25,3,2,sk); r(23,25,3,2,sk);
+  r(9,25,14,2,'#18160A');
+  r(9,27,5,12,pt); r(18,27,5,12,pt);
+  r(8,38,6,4,bt); r(18,38,6,4,bt);
 }
 
 // ── INVENTORY ─────────────────────────────────────────────────────────────
