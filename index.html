@@ -14,555 +14,636 @@
 <canvas id="c"></canvas>
 <script>
 'use strict';
-
 const c = document.getElementById('c');
 const ctx = c.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 c.style.cursor = 'crosshair';
-
-c.width  = window.innerWidth;
-c.height = window.innerHeight;
+c.width = window.innerWidth; c.height = window.innerHeight;
 let canvasRect = c.getBoundingClientRect();
-
-window.addEventListener('resize', () => {
-  c.width  = window.innerWidth;
-  c.height = window.innerHeight;
-  canvasRect = c.getBoundingClientRect();
-});
+window.addEventListener('resize', () => { c.width=window.innerWidth; c.height=window.innerHeight; canvasRect=c.getBoundingClientRect(); });
 
 // ── CONSTANTS ─────────────────────────────────────────────────────────────
-const W = 2400, H = 2400;
-const P_SPEED  = 160;
-const P_HP     = 100;
-const P_ATK    = 5;
-const P_REGEN  = 1;
-const ATK_RANGE    = 70;
-const ATK_CONE     = Math.PI * 0.75;
-const ATK_DURATION = 0.22;
-const ATK_CD       = 0.45;
-const SPAWN_INTERVAL = 20;
-const MAX_SLIMES   = 5;
-const S_HP  = 10, S_ATK = 1, S_SPEED = 46;
+const W=2400, H=2400;
+const P_SPEED=130, P_HP=50, P_ATK=3, P_REGEN=1;
+const ATK_RANGE=80, ATK_DURATION=0.3, ATK_CD=0.55;
+const SWORD_IDLE=Math.PI*0.15;
+const ROLL_SPEED=340, ROLL_DURATION=0.36, ROLL_CD=1.6;
+const SPAWN_INTERVAL=20, MAX_SLIMES=20, SPAWN_BATCH_MIN=4;
+
+const S_HP=15, S_ATK=3, S_SPEED=105, S_R=14;
+const G_HP=70, G_ATK=8, G_SPEED=62,  G_R=26;
+
+// Normal attack (bounce hop)
+const NORMAL_ATK_RANGE  = 55;
+const NORMAL_ATK_CD     = 1.8;
+const BOUNCE_SPEED      = 155;
+const BOUNCE_DURATION   = 0.45;
+const HOP_HEIGHT        = 26;
+const BOUNCE_ABORT_DIST = 85;   // player moved this far from bounce origin → abort
+
+// Lunge skill
+const LUNGE_START_RANGE = 150;
+const LUNGE_SKILL_CD    = 6.0;
+const WINDUP_NORMAL     = 0.55;
+const WINDUP_GIANT      = 0.75;
+const LUNGE_DURATION    = 0.32;
+const LUNGE_SPEED       = 360;
+const RECOVERY_DUR      = 0.38;
+
+const AGGRO_RANGE=210, DEAGGRO_RANGE=380;
+const ROAM_SPEED=0.38, ROAM_INT_MIN=5, ROAM_INT_MAX=10, ROAM_RADIUS=130;
 
 // ── STATE ──────────────────────────────────────────────────────────────────
-let cam  = { x: W/2 - c.width/2,  y: H/2 - c.height/2 };
-let keys = {};
+let cam={x:W/2-c.width/2,y:H/2-c.height/2};
+let keys={};
+let player={x:W/2,y:H/2,hp:P_HP,regen:0,facing:'down',atkCd:0,atkTimer:0,atkAngle:SWORD_IDLE,flash:0,dead:false};
+let targetSlime=null, autoMove=false, autoAttackedOnce=false;
+let rolling=false, rollTimer=0, rollCd=0, rollAngle=0, rollInvincible=false, rollTrail=[];
+let mouseDown=false;
+let slimes=[], particles=[], floaters=[];
+let spawnT=10, totalSpawned=0;
+let isTouchDevice=false;
+const joy={active:false,id:-1,bx:0,by:0,kx:0,ky:0,dx:0,dy:0,R:58,r:24};
+let atkBtnFlash=0,atkBtnHeld=false,atkBtnTouchId=-1;
+let rollBtnFlash=0,rollBtnTouchId=-1;
+function getAtkBtn()  {return{x:c.width-70, y:c.height-210,r:46};}
+function getRollBtn() {return{x:c.width-160,y:c.height-210,r:36};}
 
-let player = {
-  x: W/2, y: H/2,
-  hp: P_HP, regen: 0,
-  facing: 'down',
-  atkCd: 0, atkTimer: 0, atkAngle: 0,
-  flash: 0, dead: false
-};
-
-let slimes = [], particles = [], floaters = [];
-let spawnT = 10;
-
-// ── TOUCH STATE ────────────────────────────────────────────────────────────
-let isTouchDevice = false;
-
-const joy = {
-  active: false, id: -1,
-  bx: 0, by: 0,   // base center (where thumb landed)
-  kx: 0, ky: 0,   // knob position (clamped)
-  dx: 0, dy: 0,   // normalised direction
-  R: 58,           // outer ring radius
-  r: 24            // knob radius
-};
-
-let atkBtnFlash = 0;
-
-function getAtkBtn() {
-  // Sits above the minimap, right side
-  return { x: c.width - 70, y: c.height - 210, r: 46 };
+// ── ROLL ───────────────────────────────────────────────────────────────────
+function startRoll(dx,dy){
+  if(rolling||rollCd>0||player.dead) return;
+  const mag=Math.hypot(dx,dy);
+  rollAngle=mag>0.1?Math.atan2(dy,dx):{right:0,left:Math.PI,up:-Math.PI/2,down:Math.PI/2}[player.facing];
+  rolling=true; rollTimer=ROLL_DURATION; rollCd=ROLL_CD; autoMove=false;
 }
 
-// ── SHARED ATTACK ──────────────────────────────────────────────────────────
-function triggerAttack(angle) {
-  if (player.dead || player.atkCd > 0) return;
+// ── TARGETING ──────────────────────────────────────────────────────────────
+function pickTarget(wx,wy){
+  let best=null,bestDist=Infinity;
+  for(const s of slimes){if(!s.alive)continue;const d=Math.hypot(wx-s.x,wy-s.y);if(d<s.r+16&&d<bestDist){best=s;bestDist=d;}}
+  if(best){best.state='aggro';targetSlime=best;autoMove=true;autoAttackedOnce=false;}
+  else{targetSlime=null;autoMove=false;}
+}
 
-  player.atkAngle = angle;
-  player.atkTimer = ATK_DURATION;
-  player.atkCd    = ATK_CD;
-
-  const a = angle;
-  if      (Math.abs(a) < Math.PI * 0.25) player.facing = 'right';
-  else if (Math.abs(a) > Math.PI * 0.75) player.facing = 'left';
-  else                                    player.facing  = a < 0 ? 'up' : 'down';
-
-  for (const s of slimes) {
-    if (!s.alive) continue;
-    const dx = s.x - player.x, dy = s.y - player.y;
-    const dist = Math.hypot(dx, dy);
-    if (dist > ATK_RANGE + s.r) continue;
-    let diff = Math.atan2(dy, dx) - angle;
-    while (diff >  Math.PI) diff -= 2 * Math.PI;
-    while (diff < -Math.PI) diff += 2 * Math.PI;
-    if (Math.abs(diff) > ATK_CONE / 2) continue;
-
-    s.hp   -= P_ATK;
-    s.flash = 0.15;
-    s.kbx   = Math.cos(angle) * 190;
-    s.kby   = Math.sin(angle) * 190;
-    addFloat(s.x, s.y - s.r, `-${P_ATK}`, '#ff8888', 13);
-    burst(s.x, s.y, '#5bff8a', 5);
-    if (s.hp <= 0) {
-      s.alive = false;
-      burst(s.x, s.y, '#27ae60', 14);
-      addFloat(s.x, s.y - 28, 'SLAY!', '#f1c40f', 14);
-    }
+// ── ATTACK ON TARGET ───────────────────────────────────────────────────────
+function triggerAttackOnTarget(){
+  if(player.dead||player.atkCd>0||!targetSlime||!targetSlime.alive) return;
+  const dx=targetSlime.x-player.x,dy=targetSlime.y-player.y;
+  if(Math.hypot(dx,dy)>ATK_RANGE+targetSlime.r) return;
+  const angle=Math.atan2(dy,dx);
+  player.atkAngle=angle; player.atkTimer=ATK_DURATION; player.atkCd=ATK_CD;
+  if(Math.abs(dx)>=Math.abs(dy)) player.facing=dx>0?'right':'left'; else player.facing=dy>0?'down':'up';
+  targetSlime.hp-=P_ATK; targetSlime.flash=0.15;
+  targetSlime.kbx=Math.cos(angle)*80; targetSlime.kby=Math.sin(angle)*80;
+  targetSlime.state='aggro';
+  addFloat(targetSlime.x,targetSlime.y-targetSlime.r,`-${P_ATK}`,'#ff8888',19);
+  burst(targetSlime.x,targetSlime.y,'#5bff8a',5);
+  if(targetSlime.hp<=0){
+    targetSlime.alive=false;
+    burst(targetSlime.x,targetSlime.y,targetSlime.isGiant?'#c0392b':'#27ae60',targetSlime.isGiant?20:14);
+    addFloat(targetSlime.x,targetSlime.y-30,targetSlime.isGiant?'GIANT SLAY!':'SLAY!','#f1c40f',targetSlime.isGiant?16:14);
+    targetSlime=null; autoMove=false;
   }
 }
 
-// Mobile attack: aim in joystick direction if active, else facing direction
-function triggerMobileAttack() {
-  atkBtnFlash = 0.18;
-  const facingAngle = { right: 0, left: Math.PI, up: -Math.PI/2, down: Math.PI/2 }[player.facing];
-  const joyLen = Math.hypot(joy.dx, joy.dy);
-  const angle  = (joy.active && joyLen > 0.15)
-    ? Math.atan2(joy.dy, joy.dx)
-    : facingAngle;
-  triggerAttack(angle);
+function dealDamageToPlayer(atk){
+  player.hp=Math.max(0,player.hp-atk);
+  player.flash=0.22; burst(player.x,player.y,'#e74c3c',5);
+  if(player.hp<=0) player.dead=true;
 }
 
-// ── INPUT — KEYBOARD ───────────────────────────────────────────────────────
-window.addEventListener('keydown', e => {
-  keys[e.key.toLowerCase()] = true;
-  if (['arrowup','arrowdown','arrowleft','arrowright',' '].includes(e.key.toLowerCase()))
-    e.preventDefault();
+// ── INPUT ──────────────────────────────────────────────────────────────────
+window.addEventListener('keydown',e=>{
+  const k=e.key.toLowerCase();
+  if(!keys[k]){
+    if(k===' '){
+      e.preventDefault();
+      let dx=0,dy=0;
+      if(keys['w']||keys['arrowup'])dy-=1; if(keys['s']||keys['arrowdown'])dy+=1;
+      if(keys['a']||keys['arrowleft'])dx-=1; if(keys['d']||keys['arrowright'])dx+=1;
+      dx+=joy.dx; dy+=joy.dy; startRoll(dx,dy);
+    }
+  }
+  keys[k]=true;
+  if(['arrowup','arrowdown','arrowleft','arrowright'].includes(k)) e.preventDefault();
+  if(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright'].includes(k)) autoMove=false;
 });
-window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
-
-// ── INPUT — MOUSE (desktop) ────────────────────────────────────────────────
-c.addEventListener('click', e => {
-  if (isTouchDevice) return; // touch devices handle their own clicks
-  const cx = e.clientX - canvasRect.left;
-  const cy = e.clientY - canvasRect.top;
-  triggerAttack(Math.atan2(cy - c.height/2, cx - c.width/2));
+window.addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
+c.addEventListener('mousedown',e=>{
+  const cx=e.clientX-canvasRect.left,cy=e.clientY-canvasRect.top;
+  if(player.dead){const btn=getDeadBtn();if(cx>=btn.x&&cx<=btn.x+btn.w&&cy>=btn.y&&cy<=btn.y+btn.h)resetGame();return;}
+  if(isTouchDevice)return;mouseDown=true;pickTarget(cx+cam.x,cy+cam.y);
 });
+c.addEventListener('mouseup',()=>{mouseDown=false;});
+c.addEventListener('mouseleave',()=>{mouseDown=false;});
 
-// ── INPUT — TOUCH ──────────────────────────────────────────────────────────
-function touchPos(t) {
-  return {
-    x: t.clientX - canvasRect.left,
-    y: t.clientY - canvasRect.top
-  };
-}
-
-c.addEventListener('touchstart', e => {
-  e.preventDefault();
-  isTouchDevice = true;
-  canvasRect = c.getBoundingClientRect(); // refresh on each touch
-
-  for (const t of e.changedTouches) {
-    const { x, y } = touchPos(t);
-    const btn = getAtkBtn();
-
-    // Attack button (right side)
-    if (Math.hypot(x - btn.x, y - btn.y) < btn.r + 16) {
-      triggerMobileAttack();
-      continue;
-    }
-
-    // Left half → joystick
-    if (x < c.width * 0.55 && !joy.active) {
-      joy.active = true;
-      joy.id     = t.identifier;
-      joy.bx = x; joy.by = y;
-      joy.kx = x; joy.ky = y;
-      joy.dx = 0; joy.dy = 0;
-    }
+function touchPos(t){return{x:t.clientX-canvasRect.left,y:t.clientY-canvasRect.top};}
+c.addEventListener('touchstart',e=>{
+  e.preventDefault();isTouchDevice=true;canvasRect=c.getBoundingClientRect();
+  if(player.dead){
+    for(const t of e.changedTouches){const{x,y}=touchPos(t);const btn=getDeadBtn();if(x>=btn.x&&x<=btn.x+btn.w&&y>=btn.y&&y<=btn.y+btn.h){resetGame();return;}}
+    return;
   }
-}, { passive: false });
-
-c.addEventListener('touchmove', e => {
-  e.preventDefault();
-  for (const t of e.changedTouches) {
-    if (!joy.active || t.identifier !== joy.id) continue;
-    const { x, y } = touchPos(t);
-    const dx   = x - joy.bx, dy = y - joy.by;
-    const dist = Math.hypot(dx, dy);
-
-    if (dist < 8) {
-      joy.dx = 0; joy.dy = 0;
-      joy.kx = x; joy.ky = y;
-    } else {
-      const clamped = Math.min(dist, joy.R);
-      joy.dx = dx / dist;
-      joy.dy = dy / dist;
-      joy.kx = joy.bx + joy.dx * clamped;
-      joy.ky = joy.by + joy.dy * clamped;
-    }
+  for(const t of e.changedTouches){
+    const{x,y}=touchPos(t);const atk=getAtkBtn(),roll=getRollBtn();
+    if(Math.hypot(x-roll.x,y-roll.y)<roll.r+14){rollBtnFlash=0.2;rollBtnTouchId=t.identifier;startRoll(joy.dx,joy.dy);continue;}
+    if(Math.hypot(x-atk.x,y-atk.y)<atk.r+16){triggerAttackOnTarget();atkBtnFlash=0.2;atkBtnHeld=true;atkBtnTouchId=t.identifier;continue;}
+    const wx=x+cam.x,wy=y+cam.y;
+    let tapped=false;
+    for(const s of slimes){if(!s.alive)continue;if(Math.hypot(wx-s.x,wy-s.y)<s.r+18){pickTarget(wx,wy);tapped=true;break;}}
+    if(tapped)continue;
+    if(x<c.width*0.6&&!joy.active){joy.active=true;joy.id=t.identifier;joy.bx=x;joy.by=y;joy.kx=x;joy.ky=y;joy.dx=0;joy.dy=0;autoMove=false;}
   }
-}, { passive: false });
-
-c.addEventListener('touchend', e => {
+},{passive:false});
+c.addEventListener('touchmove',e=>{
   e.preventDefault();
-  for (const t of e.changedTouches) {
-    if (joy.active && t.identifier === joy.id) {
-      joy.active = false;
-      joy.id     = -1;
-      joy.dx = 0; joy.dy = 0;
-    }
+  for(const t of e.changedTouches){
+    if(!joy.active||t.identifier!==joy.id)continue;
+    const{x,y}=touchPos(t);const dx=x-joy.bx,dy=y-joy.by,dist=Math.hypot(dx,dy);
+    if(dist<8){joy.dx=0;joy.dy=0;joy.kx=x;joy.ky=y;}
+    else{const cl=Math.min(dist,joy.R);joy.dx=dx/dist;joy.dy=dy/dist;joy.kx=joy.bx+joy.dx*cl;joy.ky=joy.by+joy.dy*cl;}
+    autoMove=false;
   }
-}, { passive: false });
-
-c.addEventListener('touchcancel', () => {
-  joy.active = false; joy.id = -1; joy.dx = 0; joy.dy = 0;
-});
+},{passive:false});
+c.addEventListener('touchend',e=>{
+  e.preventDefault();
+  for(const t of e.changedTouches){
+    if(joy.active&&t.identifier===joy.id){joy.active=false;joy.id=-1;joy.dx=0;joy.dy=0;}
+    if(t.identifier===atkBtnTouchId){atkBtnHeld=false;atkBtnTouchId=-1;}
+    if(t.identifier===rollBtnTouchId){rollBtnTouchId=-1;}
+  }
+},{passive:false});
+c.addEventListener('touchcancel',()=>{joy.active=false;joy.id=-1;joy.dx=0;joy.dy=0;atkBtnHeld=false;atkBtnTouchId=-1;rollBtnTouchId=-1;});
 
 // ── HELPERS ────────────────────────────────────────────────────────────────
-const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-const scr   = (wx, wy) => [wx - cam.x, wy - cam.y];
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const scr=(wx,wy)=>[wx-cam.x,wy-cam.y];
+function burst(x,y,color,n){for(let i=0;i<n;i++){const a=Math.random()*Math.PI*2,spd=35+Math.random()*80;particles.push({x,y,vx:Math.cos(a)*spd,vy:Math.sin(a)*spd,color,sz:2+Math.random()*4,life:0.3+Math.random()*0.4,max:0.7});}}
+function addFloat(x,y,text,color,size){floaters.push({x,y,text,color,size,life:0.9,max:0.9,vy:-58});}
 
-function burst(x, y, color, n) {
-  for (let i = 0; i < n; i++) {
-    const a = Math.random() * Math.PI * 2, spd = 35 + Math.random() * 80;
-    particles.push({ x, y, vx: Math.cos(a)*spd, vy: Math.sin(a)*spd,
-      color, sz: 2+Math.random()*4, life: 0.3+Math.random()*0.4, max: 0.7 });
-  }
-}
-function addFloat(x, y, text, color, size) {
-  floaters.push({ x, y, text, color, size, life: 0.9, max: 0.9, vy: -58 });
-}
-function spawnSlime() {
-  let x, y, tries = 0;
-  do {
-    x = 40 + Math.random() * (W-80);
-    y = 40 + Math.random() * (H-80);
-    tries++;
-  } while (Math.hypot(x-player.x, y-player.y) < 230 && tries < 20);
-  slimes.push({ x, y, r: 14, hp: S_HP, alive: true,
-    atkCd: Math.random(), kbx: 0, kby: 0, flash: 0, animT: Math.random()*Math.PI*2 });
+function spawnSlime(){
+  totalSpawned++;const isGiant=totalSpawned%10===0;
+  let x,y,tries=0;
+  do{x=40+Math.random()*(W-80);y=40+Math.random()*(H-80);tries++;}
+  while(Math.hypot(x-player.x,y-player.y)<260&&tries<20);
+  slimes.push({
+    x,y,r:isGiant?G_R:S_R,hp:isGiant?G_HP:S_HP,maxHp:isGiant?G_HP:S_HP,
+    atk:isGiant?G_ATK:S_ATK,speed:isGiant?G_SPEED:S_SPEED,isGiant,
+    bodyCol:isGiant?'#922b21':'#27ae60',shineCol:isGiant?'#e74c3c':'#5bff8a',
+    alive:true,kbx:0,kby:0,flash:0,animT:Math.random()*Math.PI*2,
+    state:'roam',roamTarget:null,roamTimer:Math.random()*3,
+    // Attack phase machine
+    atkPhase:'idle',
+    atkPhaseTimer:0,
+    normalAtkCd:0.5+Math.random()*1.5,
+    lungeSkillCd:3+Math.random()*3,
+    bounceTargetX:0,bounceTargetY:0,
+    hasHit:false,
+    hopArc:0
+  });
+  if(isGiant) addFloat(x,y-30,'⚠ GIANT','#e74c3c',14);
 }
 
 // ── UPDATE ─────────────────────────────────────────────────────────────────
-let last = 0;
+let last=0;
+function update(dt){
+  if(player.dead) return;
+  if(targetSlime&&!targetSlime.alive){targetSlime=null;autoMove=false;}
 
-function update(dt) {
-  if (player.dead) return;
-
-  // Combined movement: keyboard + joystick
-  let dx = 0, dy = 0;
-  if (keys['w'] || keys['arrowup'])    dy -= 1;
-  if (keys['s'] || keys['arrowdown'])  dy += 1;
-  if (keys['a'] || keys['arrowleft'])  dx -= 1;
-  if (keys['d'] || keys['arrowright']) dx += 1;
-  dx += joy.dx;
-  dy += joy.dy;
-  const mag = Math.hypot(dx, dy);
-  if (mag > 1) { dx /= mag; dy /= mag; }
-
-  player.x = clamp(player.x + dx * P_SPEED * dt, 12, W-12);
-  player.y = clamp(player.y + dy * P_SPEED * dt, 12, H-12);
-
-  if (mag > 0.05) {
-    if (Math.abs(dx) >= Math.abs(dy)) player.facing = dx > 0 ? 'right' : 'left';
-    else                               player.facing = dy > 0 ? 'down'  : 'up';
-  }
-
-  if (player.atkCd   > 0) player.atkCd   -= dt;
-  if (player.atkTimer > 0) player.atkTimer -= dt;
-  if (player.flash    > 0) player.flash    -= dt;
-  if (atkBtnFlash     > 0) atkBtnFlash     -= dt;
-
-  player.regen += dt;
-  if (player.regen >= 1) { player.regen -= 1; player.hp = Math.min(P_HP, player.hp+P_REGEN); }
-
-  cam.x = player.x - c.width  / 2;
-  cam.y = player.y - c.height / 2;
-
-  spawnT -= dt;
-  if (spawnT <= 0) {
-    spawnT = SPAWN_INTERVAL;
-    const alive = slimes.filter(s => s.alive).length;
-    const n = Math.min(MAX_SLIMES - alive, 2 + Math.floor(Math.random()*2));
-    for (let i = 0; i < n; i++) spawnSlime();
-  }
-
-  for (const s of slimes) {
-    if (!s.alive) continue;
-    s.animT += dt;
-    s.flash  = Math.max(0, s.flash - dt);
-    s.kbx   *= Math.pow(0.01, dt);
-    s.kby   *= Math.pow(0.01, dt);
-    const cdx = player.x-s.x, cdy = player.y-s.y, dist = Math.hypot(cdx,cdy);
-    let cvx = 0, cvy = 0;
-    if (dist > s.r+14) { cvx = (cdx/dist)*S_SPEED; cvy = (cdy/dist)*S_SPEED; }
-    s.x = clamp(s.x+(cvx+s.kbx)*dt, s.r, W-s.r);
-    s.y = clamp(s.y+(cvy+s.kby)*dt, s.r, H-s.r);
-    if (dist <= s.r+14) {
-      s.atkCd -= dt;
-      if (s.atkCd <= 0) {
-        s.atkCd = 1;
-        player.hp = Math.max(0, player.hp-S_ATK);
-        player.flash = 0.2;
-        burst(player.x, player.y, '#e74c3c', 4);
-        if (player.hp <= 0) player.dead = true;
-      }
+  // Roll
+  if(rolling){
+    rollTimer-=dt;
+    if(rollTimer<=0){rolling=false;rollInvincible=false;}
+    else{
+      const prog=1-rollTimer/ROLL_DURATION;
+      player.x=clamp(player.x+Math.cos(rollAngle)*ROLL_SPEED*(1-prog*0.75)*dt,12,W-12);
+      player.y=clamp(player.y+Math.sin(rollAngle)*ROLL_SPEED*(1-prog*0.75)*dt,12,H-12);
+      rollInvincible=prog>0.15&&prog<0.85;
+      if(Math.floor(rollTimer*30)%2===0) rollTrail.push({x:player.x,y:player.y,alpha:0.45});
     }
   }
+  if(rollCd>0) rollCd-=dt;
+  rollTrail=rollTrail.filter(t=>{t.alpha-=dt*2.5;return t.alpha>0;});
 
-  slimes    = slimes.filter(s => s.alive);
-  particles = particles.filter(p => { p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=80*dt; p.life-=dt; return p.life>0; });
-  floaters  = floaters.filter(f => { f.y+=f.vy*dt; f.vy+=22*dt; f.life-=dt; return f.life>0; });
+  // Auto-move + first attack
+  if(autoMove&&targetSlime&&targetSlime.alive&&!rolling){
+    const dx=targetSlime.x-player.x,dy=targetSlime.y-player.y,dist=Math.hypot(dx,dy);
+    if(dist>ATK_RANGE+targetSlime.r-4){
+      player.x=clamp(player.x+(dx/dist)*P_SPEED*dt,12,W-12);
+      player.y=clamp(player.y+(dy/dist)*P_SPEED*dt,12,H-12);
+      if(Math.abs(dx)>=Math.abs(dy))player.facing=dx>0?'right':'left';else player.facing=dy>0?'down':'up';
+    }else if(!autoAttackedOnce&&player.atkCd<=0){triggerAttackOnTarget();autoAttackedOnce=true;autoMove=false;}
+  }
+  if((mouseDown||atkBtnHeld)&&autoAttackedOnce&&player.atkCd<=0&&targetSlime&&!rolling) triggerAttackOnTarget();
+
+  // Manual movement
+  if(!rolling&&!autoMove){
+    let dx=0,dy=0;
+    if(keys['w']||keys['arrowup'])dy-=1; if(keys['s']||keys['arrowdown'])dy+=1;
+    if(keys['a']||keys['arrowleft'])dx-=1; if(keys['d']||keys['arrowright'])dx+=1;
+    dx+=joy.dx; dy+=joy.dy;
+    const mag=Math.hypot(dx,dy);if(mag>1){dx/=mag;dy/=mag;}
+    player.x=clamp(player.x+dx*P_SPEED*dt,12,W-12);
+    player.y=clamp(player.y+dy*P_SPEED*dt,12,H-12);
+    if(mag>0.05&&!targetSlime){if(Math.abs(dx)>=Math.abs(dy))player.facing=dx>0?'right':'left';else player.facing=dy>0?'down':'up';}
+  }
+
+  if(player.atkCd>0)player.atkCd-=dt;if(player.atkTimer>0)player.atkTimer-=dt;
+  if(player.flash>0)player.flash-=dt;if(atkBtnFlash>0)atkBtnFlash-=dt;if(rollBtnFlash>0)rollBtnFlash-=dt;
+  player.regen+=dt;if(player.regen>=1){player.regen-=1;player.hp=Math.min(P_HP,player.hp+P_REGEN);}
+  cam.x=player.x-c.width/2;cam.y=player.y-c.height/2;
+
+  spawnT-=dt;
+  if(spawnT<=0){
+    spawnT=SPAWN_INTERVAL;
+    const alive=slimes.filter(s=>s.alive).length;
+    const n=Math.min(MAX_SLIMES-alive,SPAWN_BATCH_MIN+Math.floor(Math.random()*2));
+    for(let i=0;i<n;i++) spawnSlime();
+  }
+
+  // ── SLIME AI ───────────────────────────────────────────────────────────
+  for(const s of slimes){
+    if(!s.alive) continue;
+    s.animT+=dt; s.flash=Math.max(0,s.flash-dt);
+    s.kbx*=Math.pow(0.01,dt); s.kby*=Math.pow(0.01,dt);
+    const distP=Math.hypot(player.x-s.x,player.y-s.y);
+
+    if(s.state==='roam'){
+      if(distP<AGGRO_RANGE){s.state='aggro';addFloat(s.x,s.y-s.r-10,'!','#e74c3c',14);}
+      else{
+        s.roamTimer-=dt;
+        if(s.roamTimer<=0||!s.roamTarget){
+          const a=Math.random()*Math.PI*2,d=40+Math.random()*ROAM_RADIUS;
+          s.roamTarget={x:clamp(s.x+Math.cos(a)*d,s.r+10,W-s.r-10),y:clamp(s.y+Math.sin(a)*d,s.r+10,H-s.r-10)};
+          s.roamTimer=ROAM_INT_MIN+Math.random()*(ROAM_INT_MAX-ROAM_INT_MIN);
+        }
+        const rtdx=s.roamTarget.x-s.x,rtdy=s.roamTarget.y-s.y,rtD=Math.hypot(rtdx,rtdy);
+        if(rtD>12){s.x+=(rtdx/rtD)*s.speed*ROAM_SPEED*dt;s.y+=(rtdy/rtD)*s.speed*ROAM_SPEED*dt;}
+      }
+    } else {
+      if(distP>DEAGGRO_RANGE){s.state='roam';s.roamTimer=0;s.roamTarget=null;s.atkPhase='idle';}
+      else{
+        // Tick CDs
+        if(s.normalAtkCd>0) s.normalAtkCd-=dt;
+        if(s.lungeSkillCd>0) s.lungeSkillCd-=dt;
+
+        if(s.atkPhase==='idle'){
+          // Chase
+          if(distP>s.r+14){const cdx=player.x-s.x,cdy=player.y-s.y,d=Math.hypot(cdx,cdy);s.x+=(cdx/d)*s.speed*dt;s.y+=(cdy/d)*s.speed*dt;}
+          // Decide next attack — lunge takes priority
+          if(s.lungeSkillCd<=0&&distP<=LUNGE_START_RANGE){
+            s.atkPhase='lunge_windup';
+            s.atkPhaseTimer=s.isGiant?WINDUP_GIANT:WINDUP_NORMAL;
+            s.lungeSkillCd=LUNGE_SKILL_CD;
+            s.hasHit=false;
+          } else if(s.normalAtkCd<=0&&distP<=NORMAL_ATK_RANGE){
+            s.atkPhase='normal_bounce';
+            s.atkPhaseTimer=BOUNCE_DURATION;
+            s.bounceTargetX=player.x; s.bounceTargetY=player.y;
+            s.normalAtkCd=NORMAL_ATK_CD;
+            s.hasHit=false;
+          }
+        }
+        else if(s.atkPhase==='normal_bounce'){
+          s.atkPhaseTimer-=dt;
+          const prog=1-s.atkPhaseTimer/BOUNCE_DURATION;
+          s.hopArc=-Math.sin(prog*Math.PI)*HOP_HEIGHT;
+          // Move toward locked target
+          const ldx=s.bounceTargetX-s.x,ldy=s.bounceTargetY-s.y,ld=Math.hypot(ldx,ldy);
+          if(ld>6){s.x=clamp(s.x+(ldx/ld)*BOUNCE_SPEED*dt,s.r,W-s.r);s.y=clamp(s.y+(ldy/ld)*BOUNCE_SPEED*dt,s.r,H-s.r);}
+          // Damage on player contact
+          if(!s.hasHit&&distP<=s.r+16){
+            s.hasHit=true;
+            if(!(rolling&&rollInvincible)){
+              dealDamageToPlayer(s.atk);
+            } else {
+              addFloat(player.x,player.y-36,'DODGE!','#88aaff',19);burst(player.x,player.y,'#88aaff',8);
+            }
+            s.atkPhase='recovery';s.atkPhaseTimer=RECOVERY_DUR;s.hopArc=0;
+          }
+          // Abort: player moved far from original position (rolled away)
+          else if(!s.hasHit&&Math.hypot(player.x-s.bounceTargetX,player.y-s.bounceTargetY)>BOUNCE_ABORT_DIST){
+            s.atkPhase='idle';s.normalAtkCd=0.6;s.hopArc=0;
+          }
+          // Timeout
+          else if(s.atkPhaseTimer<=0){s.atkPhase='recovery';s.atkPhaseTimer=RECOVERY_DUR;s.hopArc=0;}
+        }
+        else if(s.atkPhase==='lunge_windup'){
+          s.atkPhaseTimer-=dt;
+          // Slow drift during windup
+          if(distP>s.r+10){const cdx=player.x-s.x,cdy=player.y-s.y,d=Math.hypot(cdx,cdy);s.x+=(cdx/d)*s.speed*0.12*dt;s.y+=(cdy/d)*s.speed*0.12*dt;}
+          if(s.atkPhaseTimer<=0){
+            s.atkPhase='lunge';s.atkPhaseTimer=LUNGE_DURATION;
+            s.bounceTargetX=player.x;s.bounceTargetY=player.y;s.hasHit=false;
+          }
+        }
+        else if(s.atkPhase==='lunge'){
+          s.atkPhaseTimer-=dt;
+          const ldx=s.bounceTargetX-s.x,ldy=s.bounceTargetY-s.y,ld=Math.hypot(ldx,ldy);
+          if(ld>6){s.x=clamp(s.x+(ldx/ld)*LUNGE_SPEED*dt,s.r,W-s.r);s.y=clamp(s.y+(ldy/ld)*LUNGE_SPEED*dt,s.r,H-s.r);}
+          const prog=1-s.atkPhaseTimer/LUNGE_DURATION;
+          if(prog>=0.55&&!s.hasHit){
+            const hd=Math.hypot(player.x-s.x,player.y-s.y);
+            if(hd<=s.r+18){
+              s.hasHit=true;
+              if(rolling&&rollInvincible){addFloat(player.x,player.y-36,'DODGE!','#88aaff',19);burst(player.x,player.y,'#88aaff',8);}
+              else dealDamageToPlayer(s.atk);
+            }
+          }
+          if(s.atkPhaseTimer<=0){s.atkPhase='recovery';s.atkPhaseTimer=RECOVERY_DUR;}
+        }
+        else if(s.atkPhase==='recovery'){
+          s.atkPhaseTimer-=dt;
+          if(s.atkPhaseTimer<=0) s.atkPhase='idle';
+        }
+      }
+    }
+    s.x=clamp(s.x+s.kbx*dt,s.r,W-s.r);s.y=clamp(s.y+s.kby*dt,s.r,H-s.r);
+  }
+
+  slimes=slimes.filter(s=>s.alive);
+  particles=particles.filter(p=>{p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=80*dt;p.life-=dt;return p.life>0;});
+  floaters=floaters.filter(f=>{f.y+=f.vy*dt;f.vy+=22*dt;f.life-=dt;return f.life>0;});
 }
 
 // ── DRAW ───────────────────────────────────────────────────────────────────
-function drawBG() {
-  ctx.fillStyle = '#11111c';
-  ctx.fillRect(0, 0, c.width, c.height);
-  ctx.strokeStyle = 'rgba(255,255,255,0.027)';
-  ctx.lineWidth = 1;
-  const gs = 80;
-  const ox = ((-cam.x%gs)+gs)%gs, oy = ((-cam.y%gs)+gs)%gs;
-  for (let x=ox; x<c.width;  x+=gs) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,c.height); ctx.stroke(); }
-  for (let y=oy; y<c.height; y+=gs) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(c.width,y);  ctx.stroke(); }
-  const [bx,by] = scr(0,0);
-  ctx.save();
-  ctx.strokeStyle = 'rgba(100,130,220,0.5)'; ctx.lineWidth = 2.5;
-  ctx.setLineDash([12,9]); ctx.strokeRect(bx,by,W,H);
-  ctx.setLineDash([]);
-  ctx.strokeStyle = 'rgba(80,110,200,0.1)'; ctx.lineWidth = 28;
-  ctx.strokeRect(bx,by,W,H);
-  ctx.restore();
+function drawBG(){
+  ctx.fillStyle='#11111c';ctx.fillRect(0,0,c.width,c.height);
+  ctx.strokeStyle='rgba(255,255,255,0.027)';ctx.lineWidth=1;
+  const gs=80,ox=((-cam.x%gs)+gs)%gs,oy=((-cam.y%gs)+gs)%gs;
+  for(let x=ox;x<c.width;x+=gs){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,c.height);ctx.stroke();}
+  for(let y=oy;y<c.height;y+=gs){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(c.width,y);ctx.stroke();}
+  const[bx,by]=scr(0,0);
+  ctx.save();ctx.strokeStyle='rgba(100,130,220,0.5)';ctx.lineWidth=2.5;ctx.setLineDash([12,9]);ctx.strokeRect(bx,by,W,H);ctx.setLineDash([]);
+  ctx.strokeStyle='rgba(80,110,200,0.1)';ctx.lineWidth=28;ctx.strokeRect(bx,by,W,H);ctx.restore();
 }
 
-function drawChar() {
-  const [sx,sy] = scr(player.x, player.y);
-  const p = 2, atk = player.atkTimer > 0;
-  ctx.fillStyle = 'rgba(0,0,0,0.28)';
-  ctx.beginPath(); ctx.ellipse(sx,sy+13,11,5,0,0,Math.PI*2); ctx.fill();
-  if (player.flash > 0) {
-    ctx.save(); ctx.globalAlpha = (player.flash/0.2)*0.45;
-    ctx.fillStyle = '#e74c3c'; ctx.fillRect(sx-14,sy-18,28,34); ctx.restore();
+function drawSlime(s){
+  const[sx,sy]=scr(s.x,s.y);
+  const isTarget=s===targetSlime;
+  const phase=s.atkPhase;
+  const hit=s.flash>0;
+  ctx.save();ctx.translate(sx,sy);
+
+  // Target ring
+  if(isTarget){
+    const pulse=0.55+0.45*Math.sin(Date.now()*0.006);
+    ctx.save();ctx.strokeStyle='#f1c40f';ctx.lineWidth=2.5;ctx.globalAlpha=pulse;
+    ctx.beginPath();ctx.arc(0,0,s.r+7,0,Math.PI*2);ctx.stroke();ctx.restore();
   }
-  ctx.save(); ctx.translate(sx,sy);
-  const idleAngle = {right:0, left:Math.PI, up:-Math.PI/2, down:Math.PI/2}[player.facing];
-  const sAngle    = atk ? player.atkAngle : idleAngle;
-  const swingOff  = atk ? (1-player.atkTimer/ATK_DURATION)*Math.PI*0.55-Math.PI*0.28 : 0;
-  if (atk) {
-    ctx.save(); ctx.strokeStyle='rgba(180,215,255,0.16)'; ctx.lineWidth=15; ctx.lineCap='round';
-    ctx.beginPath(); ctx.arc(0,0,38,player.atkAngle-ATK_CONE/2,player.atkAngle+ATK_CONE/2); ctx.stroke(); ctx.restore();
-  }
-  const drawSword = () => {
-    ctx.save(); ctx.rotate(sAngle+swingOff);
-    ctx.fillStyle='#7b4c2a'; ctx.fillRect(8,-p,7,p*2);
-    ctx.fillStyle='#b0b0b0'; ctx.fillRect(14,-p*2,p*2,p*4);
-    ctx.fillStyle='#dcdcdc'; ctx.fillRect(16,-p*0.8,22,p*1.6);
-    ctx.fillStyle='rgba(255,255,255,0.65)'; ctx.fillRect(16,-p*0.8,22,p*0.55);
-    ctx.fillStyle='#dcdcdc';
-    ctx.beginPath(); ctx.moveTo(38,-p*0.8); ctx.lineTo(38,p*0.8); ctx.lineTo(44,0); ctx.closePath(); ctx.fill();
+
+  // ── Lunge cast bar (drawn before body, stays fixed above slime) ─────────
+  if(phase==='lunge_windup'){
+    const windupDur=s.isGiant?WINDUP_GIANT:WINDUP_NORMAL;
+    const prog=1-s.atkPhaseTimer/windupDur;
+    const bw=s.isGiant?70:54, bh=8;
+    const bx2=-bw/2, by2=-(s.r+32);
+    // Label
+    ctx.save();
+    ctx.fillStyle=prog>0.65?'#ff2222':'#ff8800';
+    ctx.font=`bold ${s.isGiant?12:10}px monospace`;
+    ctx.textAlign='center';ctx.textBaseline='bottom';
+    ctx.fillText('LUNGE',0,by2-2);
+    // Bar bg
+    ctx.fillStyle='#222';ctx.fillRect(bx2-1,by2-1,bw+2,bh+2);
+    // Bar fill — orange→red
+    const r2=Math.floor(200+55*prog),g2=Math.floor(100-90*prog);
+    ctx.fillStyle=`rgb(${r2},${g2},0)`;ctx.fillRect(bx2,by2,Math.ceil(bw*prog),bh);
+    // Pulse border flash in last 0.2s
+    if(s.atkPhaseTimer<0.2){
+      ctx.globalAlpha=0.4+0.6*Math.sin(Date.now()*0.04);
+      ctx.strokeStyle='#ff2222';ctx.lineWidth=1.5;ctx.strokeRect(bx2-1,by2-1,bw+2,bh+2);
+    }
     ctx.restore();
-  };
-  if (player.facing==='up' && !atk) drawSword();
-  ctx.fillStyle='#2a1a0e'; ctx.fillRect(-5*p,6*p,4*p,p); ctx.fillRect(p,6*p,4*p,p);
-  ctx.fillStyle='#4a3020'; ctx.fillRect(-4*p,3*p,3*p,3*p); ctx.fillRect(p,3*p,3*p,3*p);
-  ctx.fillStyle='#5c3a1a'; ctx.fillRect(-4*p,2*p,8*p,p);
-  ctx.fillStyle='#2d5c2d'; ctx.fillRect(-4*p,-p,8*p,3*p);
-  ctx.fillStyle='#c09060'; ctx.fillRect(-6*p,-p,2*p,3*p); ctx.fillRect(4*p,-p,2*p,3*p);
-  ctx.fillStyle='#c09060'; ctx.fillRect(-p,-2*p,2*p,p);
-  ctx.fillStyle='#c09060'; ctx.fillRect(-3*p,-7*p,6*p,5*p);
-  ctx.fillStyle='#2e1a0a'; ctx.fillRect(-3*p,-7*p,6*p,2*p); ctx.fillRect(-4*p,-6*p,p,3*p); ctx.fillRect(3*p,-6*p,p,3*p);
-  if (player.facing!=='up') { ctx.fillStyle='#1a1a2e'; ctx.fillRect(-2*p,-5*p,p,p); ctx.fillRect(p,-5*p,p,p); }
-  if (player.facing!=='up'||atk) drawSword();
-  ctx.restore();
-}
+  }
 
-function drawSlime(s) {
-  const [sx,sy] = scr(s.x,s.y);
-  const bob = Math.sin(s.animT*3)*2, sq = 1+Math.sin(s.animT*3)*0.07;
-  ctx.save(); ctx.translate(sx,sy);
+  // Shadow — always on ground, doesn't move with hop
   ctx.fillStyle='rgba(0,0,0,0.28)';
-  ctx.beginPath(); ctx.ellipse(0,s.r+3,s.r*0.65,4,0,0,Math.PI*2); ctx.fill();
-  ctx.translate(0,bob); ctx.scale(sq,2-sq);
-  const hit=s.flash>0, body=hit?'#ff8888':'#27ae60', shine=hit?'#ffcccc':'#5bff8a';
-  ctx.fillStyle=body; ctx.beginPath(); ctx.arc(0,0,s.r,0,Math.PI*2); ctx.fill();
-  ctx.fillStyle=shine; ctx.beginPath(); ctx.arc(-s.r*0.28,-s.r*0.28,s.r*0.38,0,Math.PI*2); ctx.fill();
+  ctx.beginPath();ctx.ellipse(0,s.r+3,s.r*0.65*(phase==='normal_bounce'?1.4:1),4,0,0,Math.PI*2);ctx.fill();
+
+  // Body offset for hop arc
+  const hopArc=s.hopArc||0;
+
+  // Determine visual state
+  let body=hit?'#ff8888':s.bodyCol;
+  let shine=hit?'#ffcccc':s.shineCol;
+  let bob=Math.sin(s.animT*3)*2;
+  let scaleX=1,scaleY=1,extraAlpha=1;
+  let showWindupFx=false;
+
+  if(phase==='normal_bounce'&&!hit){
+    const prog=1-s.atkPhaseTimer/BOUNCE_DURATION;
+    body=s.isGiant?'#c0392b':'#e67e22';
+    shine='rgba(255,160,30,0.9)';
+    scaleX=1+Math.sin(prog*Math.PI)*0.12;
+    scaleY=1-Math.sin(prog*Math.PI)*0.18;
+    bob=0;
+  } else if(phase==='lunge_windup'&&!hit){
+    const prog=1-s.atkPhaseTimer/(s.isGiant?WINDUP_GIANT:WINDUP_NORMAL);
+    const r2=Math.floor(39+216*prog),g2=Math.floor(174-150*prog),b2=Math.floor(96-90*prog);
+    body=`rgb(${r2},${g2},${b2})`;
+    shine=`rgba(255,${Math.floor(180-160*prog)},50,0.8)`;
+    scaleX=1+prog*0.18;scaleY=1-prog*0.22;
+    bob=Math.sin(s.animT*(3+prog*8))*2*(1+prog);
+    showWindupFx=true;
+    if(s.atkPhaseTimer<0.18) extraAlpha=0.5+0.5*Math.sin(Date.now()*0.04);
+  } else if(phase==='lunge'&&!hit){
+    body=s.isGiant?'#c0392b':'#e67e22';shine='rgba(255,140,0,0.8)';
+    const prog=1-s.atkPhaseTimer/LUNGE_DURATION;
+    const elong=prog<0.5?prog*2:2-prog*2;
+    scaleX=1+elong*0.3;scaleY=1-elong*0.2;
+  } else if(phase==='recovery'&&!hit){
+    const prog=1-s.atkPhaseTimer/RECOVERY_DUR;
+    if(prog<0.4){body='#888';shine='#aaa';}
+  }
+
+  ctx.translate(0,bob+hopArc);ctx.scale(scaleX,scaleY);ctx.globalAlpha=extraAlpha;
+
+  if(s.isGiant&&phase!=='lunge_windup'&&!hit){ctx.strokeStyle='#7b241c';ctx.lineWidth=3;ctx.beginPath();ctx.arc(0,0,s.r,0,Math.PI*2);ctx.stroke();}
+  ctx.fillStyle=body;ctx.beginPath();ctx.arc(0,0,s.r,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle=shine;ctx.beginPath();ctx.arc(-s.r*0.28,-s.r*0.28,s.r*0.38,0,Math.PI*2);ctx.fill();
   ctx.fillStyle='#111128';
-  ctx.beginPath(); ctx.arc(-s.r*0.3,-s.r*0.1,3,0,Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.arc( s.r*0.3,-s.r*0.1,3,0,Math.PI*2); ctx.fill();
+  ctx.beginPath();ctx.arc(-s.r*0.3,-s.r*0.1,s.isGiant?4:3,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(s.r*0.3,-s.r*0.1,s.isGiant?4:3,0,Math.PI*2);ctx.fill();
   ctx.fillStyle='#fff';
-  ctx.beginPath(); ctx.arc(-s.r*0.3+1,-s.r*0.1-1,1.2,0,Math.PI*2); ctx.fill();
-  ctx.beginPath(); ctx.arc( s.r*0.3+1,-s.r*0.1-1,1.2,0,Math.PI*2); ctx.fill();
-  ctx.strokeStyle='#111128'; ctx.lineWidth=1.5;
-  ctx.beginPath(); ctx.arc(0,s.r*0.12,s.r*0.35,0.2,Math.PI-0.2); ctx.stroke();
+  ctx.beginPath();ctx.arc(-s.r*0.3+1,-s.r*0.1-1,1.2,0,Math.PI*2);ctx.fill();
+  ctx.beginPath();ctx.arc(s.r*0.3+1,-s.r*0.1-1,1.2,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle='#111128';ctx.lineWidth=s.isGiant?2:1.5;
+  ctx.beginPath();ctx.arc(0,s.r*0.12,s.r*0.35,0.2,Math.PI-0.2);ctx.stroke();
+  ctx.globalAlpha=1;
+  if(s.state==='aggro'&&phase==='idle'){ctx.fillStyle='rgba(255,60,60,0.55)';ctx.beginPath();ctx.arc(0,-s.r*0.85,s.isGiant?5:3.5,0,Math.PI*2);ctx.fill();}
+
   ctx.restore();
 }
 
-function drawHPBar(wx,wy,hp,max,bw,yOff,isPlayer) {
-  const [sx,sy]=scr(wx,wy), x=sx-bw/2, y=sy+yOff, bh=5;
-  ctx.fillStyle='#111'; ctx.fillRect(x-1,y-1,bw+2,bh+2);
+function drawChar(){
+  const[sx,sy]=scr(player.x,player.y);
+  const p=2,atk=player.atkTimer>0;
+  ctx.fillStyle='rgba(0,0,0,0.28)';ctx.beginPath();ctx.ellipse(sx,sy+13,11,5,0,0,Math.PI*2);ctx.fill();
+  if(rolling&&rollInvincible&&Math.floor(Date.now()/60)%2===0) return;
+  if(player.flash>0){ctx.save();ctx.globalAlpha=(player.flash/0.2)*0.45;ctx.fillStyle='#e74c3c';ctx.fillRect(sx-14,sy-18,28,34);ctx.restore();}
+  if(rolling){ctx.save();ctx.globalAlpha=0.35;ctx.fillStyle='#88aaff';ctx.fillRect(sx-14,sy-18,28,34);ctx.restore();}
+  ctx.save();ctx.translate(sx,sy);
+  const sAngle=atk?player.atkAngle:SWORD_IDLE;
+  let swingOff=0;
+  if(atk){const prog=1-player.atkTimer/ATK_DURATION;swingOff=prog<0.35?-0.45*(prog/0.35):-0.45+0.62*((prog-0.35)/0.65);}
+  ctx.fillStyle='#2a1a0e';ctx.fillRect(-5*p,6*p,4*p,p);ctx.fillRect(p,6*p,4*p,p);
+  ctx.fillStyle='#4a3020';ctx.fillRect(-4*p,3*p,3*p,3*p);ctx.fillRect(p,3*p,3*p,3*p);
+  ctx.fillStyle='#5c3a1a';ctx.fillRect(-4*p,2*p,8*p,p);
+  ctx.fillStyle='#2d5c2d';ctx.fillRect(-4*p,-p,8*p,3*p);
+  ctx.fillStyle='#c09060';ctx.fillRect(-6*p,-p,2*p,3*p);ctx.fillRect(4*p,-p,2*p,3*p);
+  ctx.fillStyle='#c09060';ctx.fillRect(-p,-2*p,2*p,p);
+  ctx.fillStyle='#c09060';ctx.fillRect(-3*p,-7*p,6*p,5*p);
+  ctx.fillStyle='#2e1a0a';ctx.fillRect(-3*p,-7*p,6*p,2*p);ctx.fillRect(-4*p,-6*p,p,3*p);ctx.fillRect(3*p,-6*p,p,3*p);
+  if(player.facing!=='up'){ctx.fillStyle='#1a1a2e';ctx.fillRect(-2*p,-5*p,p,p);ctx.fillRect(p,-5*p,p,p);}
+  if(!rolling){
+    ctx.save();ctx.rotate(sAngle+swingOff);
+    ctx.fillStyle='#7b4c2a';ctx.fillRect(8,-p,7,p*2);
+    ctx.fillStyle='#b0b0b0';ctx.fillRect(14,-p*2,p*2,p*4);
+    ctx.fillStyle='#dcdcdc';ctx.fillRect(16,-p*0.8,22,p*1.6);
+    ctx.fillStyle='rgba(255,255,255,0.65)';ctx.fillRect(16,-p*0.8,22,p*0.55);
+    ctx.fillStyle='#dcdcdc';ctx.beginPath();ctx.moveTo(38,-p*0.8);ctx.lineTo(38,p*0.8);ctx.lineTo(44,0);ctx.closePath();ctx.fill();
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+function drawRollTrail(){
+  for(const t of rollTrail){const[tsx,tsy]=scr(t.x,t.y);ctx.save();ctx.globalAlpha=t.alpha;ctx.fillStyle='#88aaff';ctx.beginPath();ctx.ellipse(tsx,tsy,8,11,rollAngle,0,Math.PI*2);ctx.fill();ctx.restore();}
+}
+
+function drawHPBar(wx,wy,hp,max,bw,yOff,isPlayer,isGiant){
+  const[sx,sy]=scr(wx,wy),x=sx-bw/2,y=sy+yOff,bh=isGiant?7:5;
+  ctx.fillStyle='#111';ctx.fillRect(x-1,y-1,bw+2,bh+2);
   const ratio=Math.max(0,hp/max);
   ctx.fillStyle=isPlayer?(ratio>0.6?'#2ecc40':ratio>0.3?'#f39c12':'#e74c3c'):'#e74c3c';
   ctx.fillRect(x,y,Math.ceil(bw*ratio),bh);
-  if (isPlayer) {
-    ctx.fillStyle='#fff'; ctx.font='10px monospace'; ctx.textAlign='center';
-    ctx.fillText(`${Math.ceil(hp)}/${max}`,sx,y-3);
-  }
+  if(isPlayer){ctx.fillStyle='#fff';ctx.font='10px monospace';ctx.textAlign='center';ctx.fillText(`${Math.ceil(hp)}/${max}`,sx,y-3);}
 }
 
-function drawParticles() {
-  for (const p of particles) {
-    const [sx,sy]=scr(p.x,p.y);
-    ctx.globalAlpha=p.life/p.max; ctx.fillStyle=p.color;
-    ctx.fillRect(sx-p.sz/2,sy-p.sz/2,p.sz,p.sz);
-  }
+function drawParticles(){
+  for(const p of particles){const[sx,sy]=scr(p.x,p.y);ctx.globalAlpha=p.life/p.max;ctx.fillStyle=p.color;ctx.fillRect(sx-p.sz/2,sy-p.sz/2,p.sz,p.sz);}
   ctx.globalAlpha=1;
 }
-
-function drawFloaters() {
+function drawFloaters(){
   ctx.textBaseline='middle';
-  for (const f of floaters) {
-    const [sx,sy]=scr(f.x,f.y);
-    ctx.globalAlpha=Math.min(1,f.life/(f.max*0.4));
-    ctx.fillStyle=f.color; ctx.font=`bold ${f.size}px monospace`; ctx.textAlign='center';
-    ctx.fillText(f.text,sx,sy);
-  }
-  ctx.globalAlpha=1; ctx.textBaseline='alphabetic';
+  for(const f of floaters){const[sx,sy]=scr(f.x,f.y);ctx.globalAlpha=Math.min(1,f.life/(f.max*0.4));ctx.fillStyle=f.color;ctx.font=`bold ${f.size}px monospace`;ctx.textAlign='center';ctx.fillText(f.text,sx,sy);}
+  ctx.globalAlpha=1;ctx.textBaseline='alphabetic';
 }
 
-function drawMinimap() {
-  const mw=140, mh=140, mx=c.width-mw-12, my=c.height-mh-12, pad=5;
-  ctx.fillStyle='rgba(8,8,18,0.88)'; ctx.fillRect(mx,my,mw,mh);
-  ctx.strokeStyle='#3a4060'; ctx.lineWidth=1; ctx.strokeRect(mx,my,mw,mh);
-  const sx=(mw-pad*2)/W, sy=(mh-pad*2)/H;
-  ctx.strokeStyle='rgba(100,130,220,0.35)'; ctx.lineWidth=1; ctx.strokeRect(mx+pad,my+pad,mw-pad*2,mh-pad*2);
-  ctx.strokeStyle='rgba(255,255,255,0.1)'; ctx.lineWidth=1;
-  ctx.strokeRect(mx+pad+(player.x-c.width/2)*sx, my+pad+(player.y-c.height/2)*sy, c.width*sx, c.height*sy);
-  ctx.fillStyle='#2ecc40';
-  for (const s of slimes) {
-    if (!s.alive) continue;
-    ctx.beginPath(); ctx.arc(mx+pad+s.x*sx,my+pad+s.y*sy,3,0,Math.PI*2); ctx.fill();
-  }
-  const px=mx+pad+player.x*sx, py=my+pad+player.y*sy;
-  ctx.fillStyle='#3498db'; ctx.beginPath(); ctx.arc(px,py,4,0,Math.PI*2); ctx.fill();
-  ctx.strokeStyle='#7fc8ff'; ctx.lineWidth=1; ctx.beginPath(); ctx.arc(px,py,4,0,Math.PI*2); ctx.stroke();
-  ctx.fillStyle='#445'; ctx.font='9px monospace'; ctx.textAlign='left'; ctx.fillText('MAP',mx+5,my+12);
+function drawMinimap(){
+  const mw=140,mh=140,mx=c.width-mw-12,my=c.height-mh-12,pad=5;
+  ctx.fillStyle='rgba(8,8,18,0.88)';ctx.fillRect(mx,my,mw,mh);
+  ctx.strokeStyle='#3a4060';ctx.lineWidth=1;ctx.strokeRect(mx,my,mw,mh);
+  const sx=(mw-pad*2)/W,sy=(mh-pad*2)/H;
+  ctx.strokeStyle='rgba(100,130,220,0.35)';ctx.lineWidth=1;ctx.strokeRect(mx+pad,my+pad,mw-pad*2,mh-pad*2);
+  ctx.strokeStyle='rgba(255,255,255,0.1)';ctx.lineWidth=1;
+  ctx.strokeRect(mx+pad+(player.x-c.width/2)*sx,my+pad+(player.y-c.height/2)*sy,c.width*sx,c.height*sy);
+  for(const s of slimes){if(!s.alive)continue;ctx.fillStyle=s===targetSlime?'#f1c40f':(s.isGiant?'#e74c3c':(s.state==='aggro'?'#ff6b6b':'#2ecc40'));ctx.beginPath();ctx.arc(mx+pad+s.x*sx,my+pad+s.y*sy,s.isGiant?4:2.5,0,Math.PI*2);ctx.fill();}
+  const px=mx+pad+player.x*sx,py=my+pad+player.y*sy;
+  ctx.fillStyle='#3498db';ctx.beginPath();ctx.arc(px,py,4,0,Math.PI*2);ctx.fill();
+  ctx.strokeStyle='#7fc8ff';ctx.lineWidth=1;ctx.beginPath();ctx.arc(px,py,4,0,Math.PI*2);ctx.stroke();
+  ctx.fillStyle='#445';ctx.font='9px monospace';ctx.textAlign='left';ctx.fillText('MAP',mx+5,my+12);
 }
 
-function drawHUD() {
+function drawHUD(){
   const bw=175;
-  ctx.fillStyle='rgba(8,8,18,0.82)'; ctx.fillRect(10,10,bw+10,65);
-  ctx.strokeStyle='#2a3050'; ctx.lineWidth=1; ctx.strokeRect(10,10,bw+10,65);
-  ctx.fillStyle='#556'; ctx.font='9px monospace'; ctx.textAlign='left'; ctx.fillText('HERO',15,23);
-  ctx.fillStyle='#1a1a2e'; ctx.fillRect(15,27,bw,18);
+  ctx.fillStyle='rgba(8,8,18,0.82)';ctx.fillRect(10,10,bw+10,75);
+  ctx.strokeStyle='#2a3050';ctx.lineWidth=1;ctx.strokeRect(10,10,bw+10,75);
+  ctx.fillStyle='#556';ctx.font='9px monospace';ctx.textAlign='left';ctx.fillText('HERO',15,23);
+  ctx.fillStyle='#1a1a2e';ctx.fillRect(15,27,bw,18);
   const hr=Math.max(0,player.hp/P_HP);
-  ctx.fillStyle=hr>0.6?'#2ecc40':hr>0.3?'#f39c12':'#e74c3c';
-  ctx.fillRect(15,27,Math.floor(bw*hr),18);
-  ctx.fillStyle='#fff'; ctx.font='bold 11px monospace'; ctx.textAlign='center';
-  ctx.fillText(`${Math.ceil(player.hp)} / ${P_HP}`,15+bw/2,40);
-  ctx.fillStyle='#3a8a3a'; ctx.font='9px monospace'; ctx.textAlign='left';
-  ctx.fillText(`♥ +${P_REGEN}/s`,15,60);
-  ctx.fillStyle=player.atkCd>0?'#888':'#f1c40f';
-  ctx.fillText(player.atkCd>0?`ATK: ${player.atkCd.toFixed(1)}s`:'ATK: READY',80,60);
-
-  ctx.fillStyle='rgba(8,8,18,0.82)'; ctx.fillRect(10,84,bw+10,28);
-  ctx.strokeStyle='#2a3050'; ctx.lineWidth=1; ctx.strokeRect(10,84,bw+10,28);
-  const alive=slimes.filter(s=>s.alive).length;
-  ctx.fillStyle='#556'; ctx.font='9px monospace'; ctx.textAlign='left';
-  ctx.fillText(`SLIMES: ${alive}/${MAX_SLIMES}   SPAWN: ${Math.ceil(Math.max(0,spawnT))}s`,15,97);
-  ctx.fillStyle='#334'; ctx.fillText(`Slime ${S_HP}hp ${S_ATK}atk   Hero ${P_HP}hp ${P_ATK}atk`,15,107);
-
-  if (!isTouchDevice) {
-    ctx.fillStyle='rgba(8,8,18,0.6)'; ctx.fillRect(10,c.height-44,235,34);
-    ctx.fillStyle='#445'; ctx.font='9px monospace'; ctx.textAlign='left';
-    ctx.fillText('WASD  Move       Left Click  Attack',15,c.height-29);
-    ctx.fillText('Sword swings toward click direction',15,c.height-17);
-  }
-}
-
-function drawTouchControls() {
-  if (!isTouchDevice) return;
-
-  // ── Joystick ──────────────────────────────────────────────
-  if (!joy.active) {
-    // Idle hint: faint ring bottom-left
-    ctx.save();
-    ctx.globalAlpha = 0.13;
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(85, c.height-120, joy.R, 0, Math.PI*2); ctx.stroke();
-    ctx.globalAlpha = 0.16;
-    ctx.fillStyle = '#fff'; ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('MOVE', 85, c.height-120);
-    ctx.textBaseline = 'alphabetic';
-    ctx.restore();
+  ctx.fillStyle=hr>0.6?'#2ecc40':hr>0.3?'#f39c12':'#e74c3c';ctx.fillRect(15,27,Math.floor(bw*hr),18);
+  ctx.fillStyle='#fff';ctx.font='bold 11px monospace';ctx.textAlign='center';ctx.fillText(`${Math.ceil(player.hp)} / ${P_HP}`,15+bw/2,40);
+  ctx.fillStyle=player.atkCd>0?'#888':'#f1c40f';ctx.font='9px monospace';ctx.textAlign='left';ctx.fillText(player.atkCd>0?`ATK ${player.atkCd.toFixed(1)}s`:'ATK RDY',15,58);
+  ctx.fillStyle=rollCd>0?'#888':'#88aaff';ctx.fillText(rollCd>0?`ROLL ${rollCd.toFixed(1)}s`:'ROLL RDY',90,58);
+  ctx.fillStyle='#3a8a3a';ctx.fillText(`♥ +${P_REGEN}/s`,15,70);
+  if(targetSlime){
+    ctx.fillStyle='rgba(8,8,18,0.88)';ctx.fillRect(10,94,bw+10,38);
+    ctx.strokeStyle='#f1c40f';ctx.lineWidth=1;ctx.strokeRect(10,94,bw+10,38);
+    ctx.fillStyle='#f1c40f';ctx.font='9px monospace';ctx.textAlign='left';
+    ctx.fillText((targetSlime.isGiant?'TARGET: GIANT SLIME':'TARGET: SLIME')+(autoMove?' [APPROACHING]':''),15,107);
+    ctx.fillStyle='#1a1a2e';ctx.fillRect(15,111,bw,8);
+    ctx.fillStyle='#e74c3c';ctx.fillRect(15,111,Math.ceil(bw*Math.max(0,targetSlime.hp/targetSlime.maxHp)),8);
+    ctx.fillStyle='#fff';ctx.font='9px monospace';ctx.textAlign='center';ctx.fillText(`${Math.max(0,targetSlime.hp)} / ${targetSlime.maxHp}`,15+bw/2,121);
   } else {
-    // Active joystick
-    ctx.save();
-    // Outer ring
-    ctx.globalAlpha = 0.22;
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(joy.bx, joy.by, joy.R, 0, Math.PI*2); ctx.stroke();
-    // Inner fill
-    ctx.globalAlpha = 0.1;
-    ctx.fillStyle = '#fff';
-    ctx.beginPath(); ctx.arc(joy.bx, joy.by, joy.R, 0, Math.PI*2); ctx.fill();
-    // Knob
-    ctx.globalAlpha = 0.55;
-    ctx.fillStyle = '#fff';
-    ctx.beginPath(); ctx.arc(joy.kx, joy.ky, joy.r, 0, Math.PI*2); ctx.fill();
-    ctx.restore();
+    ctx.fillStyle='rgba(8,8,18,0.82)';ctx.fillRect(10,94,bw+10,28);
+    ctx.strokeStyle='#2a3050';ctx.lineWidth=1;ctx.strokeRect(10,94,bw+10,28);
+    const alive=slimes.filter(s=>s.alive).length,giants=slimes.filter(s=>s.alive&&s.isGiant).length;
+    ctx.fillStyle='#556';ctx.font='9px monospace';ctx.textAlign='left';
+    ctx.fillText(`SLIMES: ${alive}/${MAX_SLIMES}${giants>0?` ⚠${giants}G`:''}  SPAWN: ${Math.ceil(Math.max(0,spawnT))}s`,15,107);
+    ctx.fillStyle='#334';ctx.fillText('Click a slime to target it',15,117);
   }
-
-  // ── Attack button ─────────────────────────────────────────
-  const btn = getAtkBtn();
-  const pressed = atkBtnFlash > 0;
-  ctx.save();
-  // Glow ring
-  ctx.globalAlpha = pressed ? 0.55 : 0.22;
-  ctx.strokeStyle = '#f39c12'; ctx.lineWidth = pressed ? 3 : 2;
-  ctx.beginPath(); ctx.arc(btn.x, btn.y, btn.r, 0, Math.PI*2); ctx.stroke();
-  // Fill
-  ctx.globalAlpha = pressed ? 0.35 : 0.12;
-  ctx.fillStyle = '#f39c12';
-  ctx.beginPath(); ctx.arc(btn.x, btn.y, btn.r, 0, Math.PI*2); ctx.fill();
-  // Label
-  ctx.globalAlpha = pressed ? 0.95 : 0.5;
-  ctx.fillStyle = '#fff'; ctx.font = 'bold 13px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText('ATK', btn.x, btn.y);
-  ctx.textBaseline = 'alphabetic';
-  ctx.restore();
+  if(!isTouchDevice){
+    ctx.fillStyle='rgba(8,8,18,0.6)';ctx.fillRect(10,c.height-52,268,42);
+    ctx.fillStyle='#445';ctx.font='9px monospace';ctx.textAlign='left';
+    ctx.fillText('WASD  Move       Click mob  Target',15,c.height-37);
+    ctx.fillText('Hold click  Attack   Space  Dodge',15,c.height-25);
+    ctx.fillText('Roll away from bounce target to kite',15,c.height-13);
+  }
 }
 
-function drawDead() {
-  ctx.fillStyle='rgba(0,0,0,0.78)'; ctx.fillRect(0,0,c.width,c.height);
-  ctx.fillStyle='#e74c3c'; ctx.font='bold 52px monospace'; ctx.textAlign='center';
+function drawTouchControls(){
+  if(!isTouchDevice) return;
+  if(!joy.active){
+    ctx.save();ctx.globalAlpha=0.13;ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(85,c.height-120,joy.R,0,Math.PI*2);ctx.stroke();
+    ctx.globalAlpha=0.16;ctx.fillStyle='#fff';ctx.font='bold 10px monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('MOVE',85,c.height-120);ctx.textBaseline='alphabetic';ctx.restore();
+  } else {
+    ctx.save();ctx.globalAlpha=0.22;ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(joy.bx,joy.by,joy.R,0,Math.PI*2);ctx.stroke();
+    ctx.globalAlpha=0.1;ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(joy.bx,joy.by,joy.R,0,Math.PI*2);ctx.fill();
+    ctx.globalAlpha=0.55;ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(joy.kx,joy.ky,joy.r,0,Math.PI*2);ctx.fill();ctx.restore();
+  }
+  const atk=getAtkBtn(),atkP=atkBtnFlash>0||atkBtnHeld;
+  ctx.save();ctx.globalAlpha=atkP?0.55:0.22;ctx.strokeStyle='#f39c12';ctx.lineWidth=atkP?3:2;ctx.beginPath();ctx.arc(atk.x,atk.y,atk.r,0,Math.PI*2);ctx.stroke();
+  ctx.globalAlpha=atkP?0.35:0.12;ctx.fillStyle='#f39c12';ctx.beginPath();ctx.arc(atk.x,atk.y,atk.r,0,Math.PI*2);ctx.fill();
+  ctx.globalAlpha=atkP?0.95:0.5;ctx.fillStyle='#fff';ctx.font='bold 13px monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('ATK',atk.x,atk.y);ctx.textBaseline='alphabetic';ctx.restore();
+  const roll=getRollBtn(),rollP=rollBtnFlash>0,rollReady=rollCd<=0;
+  ctx.save();ctx.globalAlpha=rollReady?(rollP?0.65:0.28):0.12;ctx.strokeStyle='#88aaff';ctx.lineWidth=rollP?3:2;ctx.beginPath();ctx.arc(roll.x,roll.y,roll.r,0,Math.PI*2);ctx.stroke();
+  ctx.globalAlpha=rollReady?(rollP?0.35:0.1):0.06;ctx.fillStyle='#88aaff';ctx.beginPath();ctx.arc(roll.x,roll.y,roll.r,0,Math.PI*2);ctx.fill();
+  ctx.globalAlpha=rollReady?(rollP?0.95:0.45):0.2;ctx.fillStyle='#fff';ctx.font='bold 11px monospace';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(rollCd>0?rollCd.toFixed(1):'ROLL',roll.x,roll.y);ctx.textBaseline='alphabetic';ctx.restore();
+}
+
+function getDeadBtn(){const bw=210,bh=46;return{x:c.width/2-bw/2,y:c.height/2+42,w:bw,h:bh};}
+
+function resetGame(){
+  player.x=W/2;player.y=H/2;player.hp=P_HP;player.regen=0;
+  player.facing='down';player.atkCd=0;player.atkTimer=0;player.atkAngle=SWORD_IDLE;
+  player.flash=0;player.dead=false;
+  slimes=[];particles=[];floaters=[];rollTrail=[];
+  targetSlime=null;autoMove=false;autoAttackedOnce=false;
+  rolling=false;rollTimer=0;rollCd=0;rollInvincible=false;
+  mouseDown=false;spawnT=10;totalSpawned=0;
+  for(let i=0;i<4;i++) spawnSlime();
+}
+
+function drawDead(){
+  ctx.fillStyle='rgba(0,0,0,0.82)';ctx.fillRect(0,0,c.width,c.height);
+  ctx.fillStyle='#e74c3c';ctx.font='bold 52px monospace';ctx.textAlign='center';
   ctx.fillText('YOU DIED',c.width/2,c.height/2-16);
-  ctx.fillStyle='#666'; ctx.font='18px monospace';
-  ctx.fillText('Refresh to play again',c.width/2,c.height/2+30);
+  const btn=getDeadBtn();
+  // Button shadow
+  ctx.fillStyle='rgba(0,0,0,0.4)';ctx.fillRect(btn.x+3,btn.y+3,btn.w,btn.h);
+  // Button fill
+  ctx.fillStyle='#c0392b';ctx.fillRect(btn.x,btn.y,btn.w,btn.h);
+  // Button highlight top edge
+  ctx.fillStyle='rgba(255,255,255,0.15)';ctx.fillRect(btn.x,btn.y,btn.w,3);
+  // Button text
+  ctx.fillStyle='#fff';ctx.font='bold 20px monospace';ctx.textAlign='center';
+  ctx.fillText('RESPAWN',c.width/2,btn.y+btn.h/2+7);
 }
 
-function draw() {
+function draw(){
   drawBG();
-  for (const s of slimes) {
-    if (!s.alive) continue;
-    drawSlime(s);
-    drawHPBar(s.x,s.y,s.hp,S_HP,38,-s.r-12,false);
-  }
-  drawParticles();
-  drawChar();
-  drawHPBar(player.x,player.y,player.hp,P_HP,54,-44,true);
-  drawFloaters();
-  drawHUD();
-  drawMinimap();
-  drawTouchControls();
-  if (player.dead) drawDead();
+  for(const s of slimes){if(!s.alive)continue;drawSlime(s);drawHPBar(s.x,s.y,s.hp,s.maxHp,s.isGiant?54:38,-s.r-12,false,s.isGiant);}
+  drawParticles();drawRollTrail();drawChar();
+  drawHPBar(player.x,player.y,player.hp,P_HP,54,-44,true,false);
+  drawFloaters();drawHUD();drawMinimap();drawTouchControls();
+  if(player.dead) drawDead();
 }
 
-// ── LOOP ───────────────────────────────────────────────────────────────────
-function loop(ts) {
-  const dt = Math.min((ts-last)/1000, 0.05);
-  last = ts;
-  update(dt);
-  draw();
-  requestAnimationFrame(loop);
-}
-
-spawnSlime(); spawnSlime();
-requestAnimationFrame(ts => { last=ts; requestAnimationFrame(loop); });
+function loop(ts){const dt=Math.min((ts-last)/1000,0.05);last=ts;update(dt);draw();requestAnimationFrame(loop);}
+for(let i=0;i<4;i++) spawnSlime();
+requestAnimationFrame(ts=>{last=ts;requestAnimationFrame(loop);});
 </script>
 </body>
 </html>
