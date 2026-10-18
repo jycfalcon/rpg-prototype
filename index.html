@@ -100,61 +100,114 @@
   }
   .inv-wrap { display:flex; flex-direction:column; height:100%; max-width:1000px; margin:0 auto; padding:16px 20px; }
   .inv-header { display:flex; justify-content:space-between; align-items:center; padding-bottom:12px; border-bottom:1px solid #3a3a80; margin-bottom:14px; }
-  .inv-title { font-size:13px; letter-spacing:0.25em; color:#ffffff; }
-  .inv-subtitle { font-size:10px; color:#9090cc; letter-spacing:0.12em; margin-top:3px; }
-  .inv-close { cursor:pointer; color:#8888cc; font-size:22px; padding:2px 10px; transition:color 0.15s; line-height:1; }
+  .inv-title { font-size:15px; letter-spacing:0.25em; color:#ffffff; }
+  .inv-subtitle { font-size:11px; color:#9090cc; letter-spacing:0.12em; margin-top:3px; }
+  .inv-close { cursor:pointer; color:#8888cc; font-size:24px; padding:2px 10px; transition:color 0.15s; line-height:1; }
   .inv-close:hover { color:#ffffff; }
   .inv-body { display:flex; gap:16px; flex:1; min-height:0; }
   /* left panel */
   .inv-left { width:340px; flex-shrink:0; display:flex; flex-direction:column; gap:12px; }
-  .inv-section-label { font-size:9px; color:#9090cc; letter-spacing:0.2em; margin-bottom:8px; }
+  .inv-section-label { font-size:10px; color:#9090cc; letter-spacing:0.2em; margin-bottom:8px; }
   .inv-gear-area { background:#111130; border:1px solid #3a3a80; padding:14px 12px; display:flex; flex-direction:column; align-items:center; gap:6px; }
   .inv-gear-row { display:flex; align-items:center; gap:6px; }
   .inv-spacer { width:56px; height:56px; flex-shrink:0; }
   .inv-slot {
-    width:56px; height:56px; background:#0c0c25; border:1px solid #3a3a70;
+    width:64px; height:64px; background:#0c0c25; border:1px solid #3a3a70;
     display:flex; flex-direction:column; align-items:center; justify-content:center;
     cursor:pointer; flex-shrink:0; transition:border-color 0.15s;
   }
   .inv-slot:hover { border-color:#7070d0; background:#14143a; }
   .inv-slot.has-item { border-color:#5555c0; background:#0e0e30; }
   .inv-slot.has-item:hover { border-color:#9090f0; }
-  .inv-slot-icon { font-size:20px; opacity:0.3; pointer-events:none; }
+  .inv-slot-icon { font-size:22px; opacity:0.3; pointer-events:none; }
   .inv-slot.has-item .inv-slot-icon { opacity:1; }
-  .inv-slot-label { font-size:7px; color:#6868b0; letter-spacing:0.08em; margin-top:2px; pointer-events:none; }
-  .inv-slot.has-item .inv-slot-label { color:#b0b0f0; }
+  .inv-slot-label { font-size:9px; color:#7070b8; letter-spacing:0.06em; margin-top:3px; pointer-events:none; }
+  .inv-slot.has-item .inv-slot-label { color:#c0c0ff; }
+  .inv-spacer { width:64px; height:64px; flex-shrink:0; }
   .inv-char-wrap { width:96px; height:144px; background:#0c0c25; border:1px solid #3a3a70; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
   #inv-char-canvas { image-rendering:pixelated; image-rendering:crisp-edges; display:block; }
   /* stats */
   .inv-stats { background:#111130; border:1px solid #3a3a80; padding:12px; flex:1; overflow-y:auto; }
   .inv-stat-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:5px 10px; margin-bottom:6px; }
-  .inv-stat-row { display:flex; justify-content:space-between; padding:2px 0; }
-  .inv-sk { font-size:9px; color:#9090cc; }
-  .inv-sv { font-size:9px; color:#e8e8ff; font-weight:bold; }
-  .inv-divider { border:none; border-top:1px solid #3a3a70; margin:8px 0; }
+  .inv-stat-row { display:flex; justify-content:space-between; padding:3px 0; }
+  .inv-sk { font-size:11px; color:#9090cc; }
+  .inv-sv { font-size:11px; color:#e8e8ff; font-weight:bold; }
+  .inv-divider { border:none; border-top:1px solid #3a3a70; margin:10px 0; }
   /* right panel */
   .inv-right { flex:1; display:flex; flex-direction:column; gap:10px; min-width:0; }
-  .inv-grid-label { font-size:9px; color:#9090cc; letter-spacing:0.18em; }
+  .inv-grid-label { font-size:11px; color:#9090cc; letter-spacing:0.15em; }
   .inv-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:5px; align-content:start; }
   .inv-item {
     aspect-ratio:1; background:#0c0c25; border:1px solid #2e2e60;
     cursor:pointer; display:flex; align-items:center; justify-content:center;
-    font-size:18px; transition:border-color 0.12s, background 0.12s; min-height:46px;
+    font-size:22px; transition:border-color 0.12s, background 0.12s; min-height:50px;
   }
   .inv-item:hover { border-color:#6060c0; background:#141440; }
   .inv-item.filled { border-color:#4545a0; }
   .inv-item.filled:hover { border-color:#8080f0; }
-  .inv-hint { font-size:8px; color:#4040a0; text-align:center; padding-top:6px; }
+  .inv-hint { font-size:10px; color:#5050a8; text-align:center; padding-top:8px; }
+  /* Stats header row */
+  .inv-stats-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+  .inv-points-label { font-size:10px; color:#9090cc; }
+  .inv-points-label span { color:#f1c40f; font-weight:bold; }
+  /* Base stat row with + button */
+  .inv-base-grid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:4px 8px; }
+  .inv-bstat {
+    display:flex; align-items:center; gap:4px; padding:4px 2px;
+    cursor:pointer; border-radius:2px; transition:background 0.1s;
+  }
+  .inv-bstat:hover { background:rgba(80,80,180,0.12); }
+  .inv-bstat-key { font-size:10px; color:#9090cc; width:26px; flex-shrink:0; }
+  .inv-bstat-val { font-size:11px; color:#e8e8ff; font-weight:bold; flex:1; }
+  .inv-bstat-pend { font-size:10px; color:#f1c40f; margin-right:2px; }
+  .inv-plus {
+    width:18px; height:18px; background:#141438; border:1px solid #3a3a80;
+    color:#7070c0; font-size:14px; line-height:1; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    padding:0; font-family:inherit; transition:all 0.12s; border-radius:2px;
+  }
+  .inv-plus:hover:not(:disabled) { background:#2a2a60; border-color:#8080e0; color:#e0e0ff; }
+  .inv-plus:disabled { opacity:0.2; cursor:default; }
+  /* Derived stats grid — 2 cols */
+  .inv-dstat-grid { display:grid; grid-template-columns:1fr 1fr; gap:3px 16px; }
+  .inv-dstat {
+    display:flex; justify-content:space-between; padding:3px 2px;
+    cursor:pointer; border-radius:2px; transition:background 0.1s;
+  }
+  .inv-dstat:hover { background:rgba(80,80,180,0.12); }
+  .inv-dstat .inv-sk::after { content:' ↗'; font-size:7px; color:#404080; }
+  /* REVERSE / APPLY */
+  .inv-actions { display:flex; gap:8px; margin-top:14px; }
+  .inv-act {
+    flex:1; padding:9px 6px; font-family:'Courier New',monospace; font-size:10px;
+    letter-spacing:0.12em; cursor:pointer; border:1px solid; transition:all 0.15s;
+    background:transparent;
+  }
+  .inv-act-reverse { border-color:#5a2020; color:#c06060; }
+  .inv-act-reverse:hover:not(:disabled) { background:#2a1010; border-color:#e04040; color:#ff9090; }
+  .inv-act-apply   { border-color:#205a20; color:#60c060; }
+  .inv-act-apply:hover:not(:disabled)   { background:#102010; border-color:#40e040; color:#90ff90; }
+  .inv-act:disabled { opacity:0.25; cursor:default; }
+  /* Stat tooltip — separate from item tooltip */
+  #stat-tooltip {
+    display:none; position:fixed; z-index:700; background:#080820;
+    border:1px solid #4a4ab0; padding:13px 15px;
+    font-family:'Courier New',monospace; color:#c8c8f0;
+    pointer-events:none; max-width:270px; line-height:1.8;
+  }
+  .stt-name { font-size:12px; color:#ffffff; font-weight:bold; margin-bottom:6px; letter-spacing:0.05em; }
+  .stt-desc { font-size:10px; color:#a0a0d8; white-space:pre-line; }
+  .stt-sub  { font-size:10px; color:#6868b0; margin-top:7px; padding-top:6px; border-top:1px solid #2a2a50; }
   /* tooltip */
   #inv-tooltip {
     display:none; position:fixed; z-index:600; background:#0e0e28;
-    border:1px solid #5050b0; padding:10px 12px;
-    font-family:'Courier New',monospace; font-size:9px; color:#c8c8f0;
-    pointer-events:none; max-width:220px; line-height:1.8;
+    border:1px solid #5050b0; padding:12px 14px;
+    font-family:'Courier New',monospace; font-size:11px; color:#c8c8f0;
+    pointer-events:none; max-width:240px; line-height:1.8;
   }
-  .tt-name { font-size:11px; color:#ffffff; margin-bottom:4px; letter-spacing:0.05em; }
-  .tt-meta { color:#8080c0; margin-bottom:5px; font-size:8px; }
-  .tt-stat { color:#90c0ff; }
+  .tt-name { font-size:13px; color:#ffffff; margin-bottom:5px; letter-spacing:0.05em; }
+  .tt-meta { color:#8080c0; margin-bottom:5px; font-size:10px; }
+  .tt-stat { color:#90c0ff; font-size:11px; }
   /* Bag button */
   #bag-btn {
     position:fixed; top:10px; right:148px; z-index:200;
@@ -332,11 +385,18 @@
 
         <!-- Stats -->
         <div class="inv-stats">
-          <div class="inv-section-label">BASE STATS</div>
-          <div class="inv-stat-grid" id="inv-base-stats"></div>
+          <div class="inv-stats-header">
+            <span class="inv-section-label" style="margin-bottom:0">BASE STATS</span>
+            <span class="inv-points-label">Points: <span id="inv-points-val">0</span></span>
+          </div>
+          <div id="inv-base-stats"></div>
           <hr class="inv-divider">
           <div class="inv-section-label">DERIVED</div>
-          <div class="inv-stat-grid" id="inv-derived-stats"></div>
+          <div id="inv-derived-stats"></div>
+          <div class="inv-actions">
+            <button class="inv-act inv-act-reverse" id="inv-reverse" onclick="reverseAllocation()" disabled>REVERSE</button>
+            <button class="inv-act inv-act-apply"   id="inv-apply"   onclick="applyAllocation()"   disabled>APPLY</button>
+          </div>
         </div>
 
       </div><!-- /inv-left -->
@@ -351,6 +411,13 @@
     </div><!-- /inv-body -->
   </div><!-- /inv-wrap -->
 </div><!-- /inventory-panel -->
+
+<!-- STAT TOOLTIP -->
+<div id="stat-tooltip">
+  <div class="stt-name" id="stt-name"></div>
+  <div class="stt-desc" id="stt-desc"></div>
+  <div class="stt-sub"  id="stt-sub" style="display:none"></div>
+</div>
 
 <!-- ITEM TOOLTIP -->
 <div id="inv-tooltip">
@@ -551,9 +618,32 @@ connectWS();
 let currentMap = 'town';
 let mapW = TOWN_W, mapH = TOWN_H;
 let nearbyNpc = null, returnPortalNearby = false;
-let inventoryOpen = false;
+let inventoryOpen   = false;
 let equipped = { headgear:null, weapon:null, body:null, leg:null, boots:null, accessory1:null, accessory2:null };
-let inventory = []; // populated when item drops are built
+let inventory       = [];
+let pendingStats    = { strength:0, vitality:0, dexterity:0, agility:0, intelligence:0, luck:0 };
+let availablePoints = 0; // (level-1) × 3 — 0 at level 1, grows with level-ups
+
+const STAT_TOOLTIPS = {
+  STR:  { name:'Strength',      desc:'Increases physical attack damage.\n+0.5 ATK per point.\nPrimary stat for Warriors.' },
+  VIT:  { name:'Vitality',      desc:'Increases HP and physical defence.\nHP formula: base × (1 + VIT × 0.1)\nDEF: VIT × 1.5\nAt DEF 100+: bonus % damage reduction unlocks.' },
+  DEX:  { name:'Dexterity',     desc:'Increases accuracy and reduces cast time.\nHIT: DEX × 2\nCast reduction: DEX × 0.5%\nPrimary stat for Archers.' },
+  AGI:  { name:'Agility',       desc:'Increases evasion and attack speed.\nFLEE: AGI × 2\nASPD: 100 + AGI × 2 (cap 200)\nHigh AGI: hard to hit, attacks fast.' },
+  INT:  { name:'Intelligence',  desc:'Increases MATK, MP, MDEF, and reduces cast time.\nMATK: INT × 0.5\nMP: 20 + INT × 10\nMDEF: INT × 1.5\nCast reduction: INT × 0.2%\nPrimary stat for Mages.' },
+  LUK:  { name:'Luck',          desc:'Increases critical hit chance.\nCRIT: LUK × 0.5%\nPhysical attacks and physical skills only.\nMagic skills cannot crit.' },
+  HP:   { name:'Health Points', desc:'Reaching zero means death.\nFormula: base × (1 + VIT × 0.1)\nBase HP: 20 + (Level - 1) × 5', sub: 'HP Regen: 2% of max HP per second' },
+  MP:   { name:'Mana Points',   desc:'Used to cast skills.\nRunning out prevents skill use.\nFormula: 20 + INT × 10', sub: 'MP Regen: 3% of max MP per second' },
+  ATK:  { name:'Physical Attack',  desc:'Damage dealt by physical attacks and skills.\nFormula: weapon ATK + STR × 0.5\nCountered by enemy DEF.' },
+  MATK: { name:'Magic Attack',     desc:'Damage dealt by magic skills.\nFormula: weapon MATK + INT × 0.5\nCountered by enemy MDEF.' },
+  DEF:  { name:'Physical Defence', desc:'Reduces physical damage taken (flat).\nFormula: VIT × 1.5 + gear DEF\nBonus % reduction unlocks at DEF 100+.' },
+  MDEF: { name:'Magic Defence',    desc:'Reduces magic damage taken (flat).\nFormula: INT × 1.5 + gear MDEF\nWarriors need INT investment or gear for this.' },
+  HIT:  { name:'Accuracy',         desc:'Your chance to land attacks on evasive targets.\nFormula: DEX × 2\nCounters enemy FLEE.' },
+  FLEE: { name:'Evasion',          desc:'Passive chance to dodge physical basic attacks.\nFormula: AGI × 2\nDoes not dodge magic skills.\nCountered by attacker HIT.' },
+  CRIT: { name:'Critical Chance',  desc:'Chance to deal a critical hit for bonus damage.\nFormula: LUK × 0.5%\nPhysical attacks and physical skills only.' },
+  ASPD: { name:'Attack Speed',     desc:'How fast you perform autoattacks and physical skills.\nFormula: 100 + AGI × 2\nCap: 200 (= 2× base attack speed).\nDoes not affect cast time.' },
+  CAST: { name:'Cast Time Reduction', desc:'Reduces the time to cast magic skills.\nFormula: DEX × 0.5% + INT × 0.2%\nCap: −70% (skills always take at least 30% of base time).' },
+  MOVE: { name:'Movement Speed',   desc:'How fast your character moves.\nBase: 100%.\nModified by buffs, debuffs, boots, and skills.\nCap: 200%. Floor: 15%.' },
+};
 
 let cam = { x: TOWN_SPAWN_X - window.innerWidth/2, y: TOWN_SPAWN_Y - window.innerHeight/2 };
 let keys = {};
@@ -619,8 +709,6 @@ function triggerInteract(npc) {
 document.addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
   if (k === 'b') {
-    // Don't intercept if user is typing in an input/textarea
-    if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA')) return;
     inventoryOpen ? closeInventory() : openInventory();
   }
   if (k === 'escape') {
@@ -1553,20 +1641,47 @@ function getBaseStats() {
   return base;
 }
 
-function computeDerived(s) {
-  const baseHp = 20; // level 1 base (20 + (lv-1)*5)
-  const maxHp  = Math.floor(baseHp * (1 + s.vitality * 0.1));
-  const wAtk   = equipped.weapon?.stats?.atk  || 0;
-  const wMatk  = equipped.weapon?.stats?.matk || 0;
+function computeDerived(base, pending) {
+  const p = pending || {};
+  const str  = (base.strength     || 0) + (p.strength     || 0);
+  const vit  = (base.vitality     || 0) + (p.vitality     || 0);
+  const dex  = (base.dexterity    || 0) + (p.dexterity    || 0);
+  const agi  = (base.agility      || 0) + (p.agility      || 0);
+  const int_ = (base.intelligence || 0) + (p.intelligence || 0);
+  const luk  = (base.luck         || 0) + (p.luck         || 0);
+
+  const level  = 1; // server will provide real level later
+  const baseHp = 20 + (level - 1) * 5;
+  const maxHp  = Math.floor(baseHp * (1 + vit * 0.1));
+  const maxMp  = 20 + int_ * 10;
+
+  const wAtk  = equipped.weapon?.stats?.atk  || 0;
+  const wMatk = equipped.weapon?.stats?.matk || 0;
+  let gearDef = 0, gearMdef = 0;
+  for (const item of Object.values(equipped)) {
+    if (!item?.stats) continue;
+    gearDef  += item.stats.def  || 0;
+    gearMdef += item.stats.mdef || 0;
+  }
+
+  const aspd    = Math.min(200, 100 + agi * 2);
+  const castRed = -Math.min(70, Math.floor(dex * 0.5 + int_ * 0.2));
+  const hpRegen = (maxHp * 0.02).toFixed(1);
+  const mpRegen = (maxMp * 0.03).toFixed(1);
+
   return {
-    'HP':   maxHp,
-    'ATK':  wAtk  + Math.floor(s.strength    * 0.5),
-    'MATK': wMatk + Math.floor(s.intelligence * 0.5),
-    'DEF':  Math.floor(s.vitality * 1.5),
-    'HIT':  s.dexterity * 2,
-    'FLEE': s.agility   * 2,
-    'CRIT': Math.floor(s.luck * 0.5) + '%',
-    'ASPD': 100 + Math.floor(s.agility * 2),
+    HP:   { val: maxHp,                          sub: `Regen ${hpRegen} / sec` },
+    MP:   { val: maxMp,                          sub: `Regen ${mpRegen} / sec` },
+    ATK:  { val: wAtk  + Math.floor(str  * 0.5), sub: null },
+    MATK: { val: wMatk + Math.floor(int_ * 0.5), sub: null },
+    DEF:  { val: gearDef  + Math.floor(vit  * 1.5), sub: gearDef  > 0 ? `Base ${Math.floor(vit*1.5)} + gear ${gearDef}` : null },
+    MDEF: { val: gearMdef + Math.floor(int_ * 1.5), sub: gearMdef > 0 ? `Base ${Math.floor(int_*1.5)} + gear ${gearMdef}` : null },
+    HIT:  { val: dex * 2,  sub: null },
+    FLEE: { val: agi * 2,  sub: null },
+    CRIT: { val: Math.floor(luk * 0.5) + '%', sub: 'Physical only' },
+    ASPD: { val: aspd,     sub: aspd >= 200 ? 'Cap reached' : `Cap: 200` },
+    CAST: { val: castRed === 0 ? '0%' : castRed + '%', sub: castRed <= -70 ? 'Cap reached' : 'Cap: −70%' },
+    MOVE: { val: '100%',   sub: 'Buffs/debuffs apply in %' },
   };
 }
 
@@ -1606,29 +1721,7 @@ function refreshInventoryUI() {
     el.onmousemove  = item ? moveTooltip  : null;
   }
 
-  // Base stats
-  const base = getBaseStats();
-  const baseEl = document.getElementById('inv-base-stats');
-  if (baseEl) {
-    const entries = [
-      ['STR', base.strength], ['VIT', base.vitality], ['DEX', base.dexterity],
-      ['AGI', base.agility],  ['INT', base.intelligence], ['LUK', base.luck],
-    ];
-    baseEl.innerHTML = entries.map(([k,v]) =>
-      `<div class="inv-stat-row"><span class="inv-sk">${k}</span><span class="inv-sv">${v}</span></div>`
-    ).join('');
-  }
-
-  // Derived stats
-  const derived = computeDerived(base);
-  const drvEl = document.getElementById('inv-derived-stats');
-  if (drvEl) {
-    drvEl.innerHTML = Object.entries(derived).map(([k,v]) =>
-      `<div class="inv-stat-row"><span class="inv-sk">${k}</span><span class="inv-sv">${v}</span></div>`
-    ).join('');
-  }
-
-  // Inventory grid
+  refreshStatsPanel();
   renderInventoryGrid();
 }
 
@@ -1720,6 +1813,130 @@ function moveTooltip(e) {
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
+// ── STAT PANEL ────────────────────────────────────────────────────────────
+function refreshStatsPanel() {
+  const base = getBaseStats();
+
+  // ── Base stats with + buttons ──────────────────────────────────────────
+  const baseEl = document.getElementById('inv-base-stats');
+  if (baseEl) {
+    const rows = [
+      ['STR','strength'], ['VIT','vitality'], ['DEX','dexterity'],
+      ['AGI','agility'],  ['INT','intelligence'], ['LUK','luck'],
+    ];
+    const noPoints = availablePoints <= 0;
+    baseEl.innerHTML = `<div class="inv-base-grid">` + rows.map(([lbl, key]) => {
+      const val  = base[key]           || 0;
+      const pend = pendingStats[key]   || 0;
+      const pendHtml = pend > 0 ? `<span class="inv-bstat-pend">(+${pend})</span>` : '';
+      return `<div class="inv-bstat"
+          onmouseenter="showStatTip(event,'${lbl}')"
+          onmouseleave="hideStatTip()" onmousemove="moveStatTip(event)">
+        <span class="inv-bstat-key">${lbl}</span>
+        <span class="inv-bstat-val">${val}</span>
+        ${pendHtml}
+        <button class="inv-plus" onclick="addStatPoint('${key}')" ${noPoints?'disabled':''}
+          title="${availablePoints} point${availablePoints!==1?'s':''} available">+</button>
+      </div>`;
+    }).join('') + `</div>`;
+  }
+
+  // Points display
+  const pv = document.getElementById('inv-points-val');
+  if (pv) pv.textContent = availablePoints;
+
+  // ── Derived stats ──────────────────────────────────────────────────────
+  const derived = computeDerived(base, pendingStats);
+  const drvEl = document.getElementById('inv-derived-stats');
+  if (drvEl) {
+    const order = ['HP','MP','ATK','MATK','DEF','MDEF','HIT','FLEE','CRIT','ASPD','CAST','MOVE'];
+    drvEl.innerHTML = `<div class="inv-dstat-grid">` + order.map(key => {
+      const d = derived[key];
+      return `<div class="inv-dstat"
+          onmouseenter="showStatTip(event,'${key}')"
+          onmouseleave="hideStatTip()" onmousemove="moveStatTip(event)">
+        <span class="inv-sk">${key}</span>
+        <span class="inv-sv">${d.val}</span>
+      </div>`;
+    }).join('') + `</div>`;
+  }
+
+  // ── Button states ──────────────────────────────────────────────────────
+  const hasPending = Object.values(pendingStats).some(v => v > 0);
+  const revBtn = document.getElementById('inv-reverse');
+  const appBtn = document.getElementById('inv-apply');
+  if (revBtn) revBtn.disabled = !hasPending;
+  if (appBtn) appBtn.disabled = !hasPending;
+}
+
+function addStatPoint(statKey) {
+  if (availablePoints <= 0) return;
+  availablePoints--;
+  pendingStats[statKey]++;
+  refreshStatsPanel();
+}
+
+function reverseAllocation() {
+  const spent = Object.values(pendingStats).reduce((a, b) => a + b, 0);
+  availablePoints += spent;
+  pendingStats = { strength:0, vitality:0, dexterity:0, agility:0, intelligence:0, luck:0 };
+  refreshStatsPanel();
+}
+
+function applyAllocation() {
+  const spent = Object.values(pendingStats).reduce((a, b) => a + b, 0);
+  if (spent === 0) return;
+  // Send to server — server validates cap (20 per stat), writes to Supabase
+  if (ws && ws.readyState === 1) {
+    ws.send(JSON.stringify({ type:'allocate_stats', pending: { ...pendingStats } }));
+  }
+  // Optimistic local apply — server confirms or corrects
+  const base = CLASS_STARTING_STATS[rpg_char_class] || CLASS_STARTING_STATS.warrior;
+  for (const [k, v] of Object.entries(pendingStats)) {
+    if (v > 0) base[k] = (base[k] || 0) + v;
+  }
+  pendingStats = { strength:0, vitality:0, dexterity:0, agility:0, intelligence:0, luck:0 };
+  // Update max HP in game
+  const derived = computeDerived(getBaseStats(), {});
+  playerMaxHp = derived.HP.val;
+  player.hp = Math.min(player.hp, playerMaxHp);
+  refreshStatsPanel();
+}
+
+// ── Stat tooltip ───────────────────────────────────────────────────────────
+function showStatTip(e, key) {
+  const data = STAT_TOOLTIPS[key];
+  if (!data) return;
+  const tt = document.getElementById('stat-tooltip');
+  if (!tt) return;
+  // Derive sub-stat live so regen shows current values
+  const derived = computeDerived(getBaseStats(), pendingStats);
+  const dStat = derived[key];
+  const subText = dStat?.sub || data.sub || null;
+  document.getElementById('stt-name').textContent = data.name;
+  document.getElementById('stt-desc').textContent = data.desc;
+  const subEl = document.getElementById('stt-sub');
+  if (subEl) {
+    subEl.style.display = subText ? 'block' : 'none';
+    if (subText) subEl.textContent = subText;
+  }
+  tt.style.display = 'block';
+  moveStatTip(e);
+}
+
+function hideStatTip() {
+  const tt = document.getElementById('stat-tooltip');
+  if (tt) tt.style.display = 'none';
+}
+
+function moveStatTip(e) {
+  const tt = document.getElementById('stat-tooltip');
+  if (!tt || tt.style.display === 'none') return;
+  const x = Math.min(e.clientX + 16, window.innerWidth  - tt.offsetWidth  - 8);
+  const y = Math.min(e.clientY - 10, window.innerHeight - tt.offsetHeight - 8);
+  tt.style.left = x + 'px'; tt.style.top = y + 'px';
+}
+
 function itemIcon(item) {
   const icons = { sword:'⚔️', bow:'🏹', staff:'🔮', headgear:'🪖', body:'🥋', leg:'👖', boots:'👟', accessory:'💍' };
   return icons[item.subtype] || icons[item.slot] || '◈';
