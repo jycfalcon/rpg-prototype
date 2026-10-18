@@ -89,6 +89,7 @@ function doSpawnKing(){
 
 // ── GAME LOOP ──────────────────────────────────────────────────────────────
 function tick(){
+  try{
   const now=Date.now();
   const dt=Math.min((now-lastTick)/1000,0.05);
   lastTick=now;
@@ -164,7 +165,7 @@ function tick(){
                 s.atkPhase='recovery';s.atkPhaseTimer=RECOVERY_DUR;s.hopArc=0;break;
               }
             }
-            if(!s.hasHit&&Math.hypot(near.x-s.bounceTargetX,near.y-s.bounceTargetY)>BOUNCE_ABORT_DIST){
+            if(!s.hasHit&&near&&Math.hypot(near.x-s.bounceTargetX,near.y-s.bounceTargetY)>BOUNCE_ABORT_DIST){
               s.atkPhase='idle';s.normalAtkCd=0.6;s.hopArc=0;
             }
           }
@@ -238,6 +239,9 @@ function tick(){
   });
 }
 
+  }catch(e){ console.error('[tick error]', e.message); }
+}
+
 setInterval(tick, 1000/20);
 
 // ── CONNECTIONS ───────────────────────────────────────────────────────────
@@ -296,5 +300,9 @@ function sendToPlayer(pid,msg){const p=players.get(pid);if(p?.ws.readyState===We
 // Initial spawn
 for(let i=0;i<4;i++) doSpawnSlime();
 doSpawnKing();
+
+// Prevent crashes from killing the server
+process.on('uncaughtException', e => console.error('[uncaught]', e.message));
+process.on('unhandledRejection', e => console.error('[unhandled]', e));
 
 server.listen(PORT,()=>console.log(`Server on port ${PORT}`));
