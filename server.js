@@ -1,24 +1,29 @@
+const http      = require('http');
 const WebSocket = require('ws');
 
 const PORT = process.env.PORT || 3000;
-const wss  = new WebSocket.Server({ port: PORT });
+
+// HTTP server — Railway needs this for health checks
+const server = http.createServer((req, res) => {
+  res.writeHead(200);
+  res.end('RPG Server running');
+});
+
+const wss = new WebSocket.Server({ server });
 
 let nextId  = 1;
-const players = new Map(); // id → { ws, state }
+const players = new Map();
 
 wss.on('connection', ws => {
   const id = String(nextId++);
   players.set(id, { ws, state: null });
   console.log(`[+] Player ${id} joined  — total: ${players.size}`);
 
-  // Welcome: send this player their ID + snapshot of everyone already here
   const existing = [];
   for (const [pid, p] of players) {
     if (pid !== id && p.state) existing.push(p.state);
   }
   send(ws, { type: 'welcome', id, others: existing });
-
-  // Notify everyone else
   broadcast({ type: 'join', id }, id);
 
   ws.on('message', raw => {
@@ -54,4 +59,4 @@ function broadcast(msg, excludeId) {
   }
 }
 
-console.log(`WS server listening on port ${PORT}`);
+server.listen(PORT, () => console.log(`Server listening on port ${PORT}`));
