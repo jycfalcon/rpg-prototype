@@ -1950,11 +1950,22 @@ function renderInventoryGrid() {
         ? `<div style="position:absolute;top:2px;right:3px;font-size:11px;color:#f1c40f;line-height:1;pointer-events:none;">★</div>`
         : '';
       slot.innerHTML = `<span style="font-size:20px;pointer-events:none;">${itemIcon(item)}</span>${starHtml}`;
-      slot.addEventListener('dblclick',     ()  => equipFromInventory(i));
-      slot.addEventListener('contextmenu',  (e) => openCtxMenu(e, i));
-      slot.addEventListener('mouseenter',   (e) => showTooltip(e, item));
-      slot.addEventListener('mouseleave',   hideTooltip);
-      slot.addEventListener('mousemove',    moveTooltip);
+      slot.addEventListener('dblclick',    ()  => equipFromInventory(i));
+      slot.addEventListener('contextmenu', (e) => { e.preventDefault(); openCtxMenu(e, i); });
+      slot.addEventListener('mouseenter',  (e) => showTooltip(e, item));
+      slot.addEventListener('mouseleave',  hideTooltip);
+      slot.addEventListener('mousemove',   moveTooltip);
+      // Long press — mobile equivalent of right-click
+      let _lpTimer = null;
+      slot.addEventListener('touchstart', e => {
+        _lpTimer = setTimeout(() => {
+          e.preventDefault();
+          const t = e.touches[0];
+          openCtxMenu({ clientX: t.clientX, clientY: t.clientY, preventDefault:()=>{} }, i);
+        }, 500);
+      }, { passive: true });
+      slot.addEventListener('touchend',   () => clearTimeout(_lpTimer));
+      slot.addEventListener('touchmove',  () => clearTimeout(_lpTimer));
     } else {
       slot.className = 'inv-item';
     }
