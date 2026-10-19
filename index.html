@@ -177,7 +177,7 @@
   .inv-slot-label { font-size:9px; color:#7070b8; letter-spacing:0.06em; margin-top:3px; pointer-events:none; }
   .inv-slot.has-item .inv-slot-label { color:#c0c0ff; }
   .inv-spacer { width:64px; height:64px; flex-shrink:0; }
-  .inv-char-wrap { width:96px; height:144px; background:#0c0c25; border:1px solid #3a3a70; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .inv-char-wrap { width:64px; height:96px; background:#0c0c25; border:1px solid #3a3a70; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
   #inv-char-canvas { image-rendering:pixelated; image-rendering:crisp-edges; display:block; }
   /* stats */
   .inv-stats { background:#111130; border:1px solid #3a3a80; padding:12px; flex:1; overflow-y:auto; }
@@ -469,7 +469,7 @@
               <span class="inv-slot-label">WEAPON</span>
             </div>
             <div class="inv-char-wrap">
-              <canvas id="inv-char-canvas" width="96" height="144"></canvas>
+              <canvas id="inv-char-canvas" width="64" height="96"></canvas>
             </div>
             <div class="inv-slot" id="slot-body" title="Body armor" ondblclick="unequipSlot('body')">
               <span class="inv-slot-icon">🥋</span>
@@ -697,6 +697,7 @@ function connectWS() {
         playerXPToNext  = msg.xpToNext   || 100;
         availablePoints      = msg.statPoints  || 0;
         availableSkillPoints = msg.skillPoints || 0;
+        charSpriteDirty = true;
         updateXPBar();
         loadInventory();
       }
@@ -875,8 +876,10 @@ let player = { x:TOWN_SPAWN_X, y:TOWN_SPAWN_Y, hp:playerMaxHp, regen:0, facing:'
 let stunned=false, stunTimer=0;
 let targetSlime=null, autoMove=false, autoAttackedOnce=false;
 let rolling=false, rollTimer=0, rollCd=0, rollAngle=0, rollInvincible=false, rollTrail=[];
-let walkCycle=0;   // drives leg animation
-let impacts=[];    // hit impact line effects
+let walkCycle=0;
+let impacts=[];
+let charSpriteCanvas = null;  // offscreen canvas — world character body
+let charSpriteDirty  = true;  // rebuild on next frame if appearance/equipment changed
 let mouseDown=false;
 let slimes=[], particles=[], floaters=[], cracks=[];
 let isTouchDevice=false;
@@ -1493,85 +1496,99 @@ function drawOtherChar(op){
   drawHPBar(op.x,op.y,op.hp,op.maxHp||playerMaxHp,40,-36,false,false,false);
 }
 
-function drawChar(){
-  const[sx,sy]=scr(player.x,player.y);
-  const p=2,atk=player.atkTimer>0;
-  ctx.fillStyle='rgba(0,0,0,0.28)';ctx.beginPath();ctx.ellipse(sx,sy+13,11,5,0,0,Math.PI*2);ctx.fill();
-  if(rolling&&rollInvincible&&Math.floor(Date.now()/60)%2===0)return;
-  if(player.flash>0){ctx.save();ctx.globalAlpha=(player.flash/0.25)*0.45;ctx.fillStyle='#e74c3c';ctx.fillRect(sx-14,sy-18,28,34);ctx.restore();}
-  if(rolling){ctx.save();ctx.globalAlpha=0.35;ctx.fillStyle='#88aaff';ctx.fillRect(sx-14,sy-18,28,34);ctx.restore();}
-  if(stunned){ctx.save();ctx.globalAlpha=0.3+0.2*Math.sin(Date.now()*0.01);ctx.fillStyle='#f1c40f';ctx.fillRect(sx-14,sy-18,28,34);ctx.restore();}
-  ctx.save();ctx.translate(sx,sy);
-  const sAngle=atk?player.atkAngle:SWORD_IDLE;
-  let swingOff=0;if(atk){const prog=1-player.atkTimer/ATK_DURATION;swingOff=prog<0.35?-0.45*(prog/0.35):-0.45+0.62*((prog-0.35)/0.65);}
-  // Use actual appearance
-  const _sk = SKIN_PAL[parseInt(localStorage.getItem('rpg_skin_tone') || '0')] || SKIN_PAL[0];
-  const _hr = HAIR_PAL[parseInt(localStorage.getItem('rpg_hair_color') || '0')] || HAIR_PAL[0];
-  const _hi = parseInt(localStorage.getItem('rpg_hair_style') || '0');
-  const _sh = CLASS_SHIRT[rpg_char_class] || '#2d5c2d';
-  // Hair (drawn behind head)
-  ctx.fillStyle=_hr;
-  if(_hi===0){ctx.fillRect(-3*p,-8*p,6*p,2*p);}
-  else if(_hi===1){ctx.fillRect(-3*p,-8*p,6*p,2*p);ctx.fillRect(-4*p,-7*p,p,8*p);ctx.fillRect(3*p,-7*p,p,8*p);}
-  else if(_hi===2){for(let _i=-2;_i<=2;_i++)ctx.fillRect(_i*p,-9*p,p,3*p);}
-  else{ctx.fillRect(-2*p,-9*p,4*p,4*p);}
-  // Body — legs animate while walking
-  const _wk = Math.round(Math.sin(walkCycle) * 2);
-  ctx.fillStyle='#2a1a0e'; // boots
-  ctx.fillRect(-5*p, 6*p + _wk, 4*p, p);
-  ctx.fillRect(   p, 6*p - _wk, 4*p, p);
-  ctx.fillStyle='#4a3020'; // legs
-  ctx.fillRect(-4*p, 3*p + _wk, 3*p, 3*p);
-  ctx.fillRect(   p, 3*p - _wk, 3*p, 3*p);
-  ctx.fillStyle='#5c3a1a';ctx.fillRect(-4*p,2*p,8*p,p);
-  ctx.fillStyle=_sh;ctx.fillRect(-4*p,-p,8*p,3*p);
-  ctx.fillStyle=_sk;ctx.fillRect(-6*p,-p,2*p,3*p);ctx.fillRect(4*p,-p,2*p,3*p);
-  ctx.fillStyle=_sk;ctx.fillRect(-p,-2*p,2*p,p);
-  ctx.fillStyle=_sk;ctx.fillRect(-3*p,-7*p,6*p,5*p);
-  ctx.fillStyle=_hr;ctx.fillRect(-3*p,-7*p,6*p,p);ctx.fillRect(-4*p,-6*p,p,3*p);ctx.fillRect(3*p,-6*p,p,3*p);
-  if(player.facing!=='up'){ctx.fillStyle='#1a1a2e';ctx.fillRect(-2*p,-5*p,p,p);ctx.fillRect(p,-5*p,p,p);}
-  // Draw weapon — during roll use idle angle (no swing), otherwise normal
-  if (equipped.weapon?.subtype) {
-    const rollAngleForWeapon = rolling ? SWORD_IDLE : sAngle;
-    const rollSwingOff = rolling ? 0 : swingOff;
-    drawWeaponOnChar(ctx, p, equipped.weapon.subtype, !rolling && player.atkTimer>0, rollAngleForWeapon, rollSwingOff);
+function rebuildCharSprite() {
+  if (!charSpriteCanvas) {
+    charSpriteCanvas = document.createElement('canvas');
+    charSpriteCanvas.width  = 32; // scale 1 — same proportions as inventory, just smaller
+    charSpriteCanvas.height = 48;
   }
-  if(stunned){
-    const t=Date.now()*0.004;
-    for(let i=0;i<4;i++){const a=t+(i*Math.PI/2);const sx2=Math.cos(a)*16,sy2=-16+Math.sin(a)*6;ctx.fillStyle='#f1c40f';ctx.beginPath();ctx.arc(sx2,sy2,3,0,Math.PI*2);ctx.fill();}
+  const sk = parseInt(localStorage.getItem('rpg_skin_tone')  || '0');
+  const hs = parseInt(localStorage.getItem('rpg_hair_style') || '0');
+  const hc = parseInt(localStorage.getItem('rpg_hair_color') || '0');
+  drawSprite(charSpriteCanvas, sk, hs, hc, rpg_char_class, 1);
+  charSpriteDirty = false;
+}
+
+function drawChar(){
+  const [sx, sy] = scr(player.x, player.y);
+  const atk = player.atkTimer > 0;
+
+  // Shadow
+  ctx.fillStyle='rgba(0,0,0,0.28)';ctx.beginPath();ctx.ellipse(sx,sy+13,11,5,0,0,Math.PI*2);ctx.fill();
+
+  // Roll invincibility flicker
+  if(rolling && rollInvincible && Math.floor(Date.now()/60)%2===0) return;
+
+  // Hit / roll / stun tint overlays
+  if(player.flash>0){ctx.save();ctx.globalAlpha=(player.flash/0.25)*0.45;ctx.fillStyle='#e74c3c';ctx.fillRect(sx-16,sy-38,32,52);ctx.restore();}
+  if(rolling){ctx.save();ctx.globalAlpha=0.35;ctx.fillStyle='#88aaff';ctx.fillRect(sx-16,sy-38,32,52);ctx.restore();}
+  if(stunned){ctx.save();ctx.globalAlpha=0.3+0.2*Math.sin(Date.now()*0.01);ctx.fillStyle='#f1c40f';ctx.fillRect(sx-16,sy-38,32,52);ctx.restore();}
+
+  // ── Draw body via unified drawSprite renderer ─────────────────────────
+  if (charSpriteDirty) rebuildCharSprite();
+  // Sprite is 32×48. Character visual from y=4 to y=42 (38px).
+  // Position so feet (y=42) land at sy+12 → draw top-left at (sx-16, sy+12-42) = (sx-16, sy-30)
+  ctx.save();
+  // Walking leg animation: offset the lower half slightly
+  const _wk = Math.round(Math.sin(walkCycle) * 1.5);
+  // Draw full sprite (no walk animation in sprite — handled via slight blur below)
+  ctx.drawImage(charSpriteCanvas, sx-16, sy-30);
+  ctx.restore();
+
+  // ── Weapon overlay ─────────────────────────────────────────────────────
+  ctx.save();
+  ctx.translate(sx, sy);
+  const sAngle   = atk ? player.atkAngle : SWORD_IDLE;
+  let swingOff   = 0;
+  if(atk){ const prog=1-player.atkTimer/ATK_DURATION; swingOff=prog<0.35?-0.45*(prog/0.35):-0.45+0.62*((prog-0.35)/0.65); }
+
+  if (equipped.weapon?.subtype) {
+    const p = 2; // weapon still at p=2 scale — visible at this character size
+    const wAngle    = rolling ? SWORD_IDLE : sAngle;
+    const wSwingOff = rolling ? 0 : swingOff;
+    // Translate to right-hand position in scale-1 sprite
+    // Right hand at logical (23,25) → screen offset from (sx,sy): (23-16, 25-30) = (7,-5)
+    ctx.translate(7, -5);
+    drawWeaponOnChar(ctx, p, equipped.weapon.subtype, !rolling && atk, wAngle, wSwingOff);
   }
   ctx.restore();
+
+  // ── Stun stars ────────────────────────────────────────────────────────
+  if(stunned){
+    const t=Date.now()*0.004;
+    ctx.save(); ctx.translate(sx,sy);
+    for(let i=0;i<4;i++){const a=t+(i*Math.PI/2);ctx.fillStyle='#f1c40f';ctx.beginPath();ctx.arc(Math.cos(a)*18,sy-50+Math.sin(a)*6-sy,3,0,Math.PI*2);ctx.fill();}
+    ctx.restore();
+  }
 }
 
 // Draws weapon on a character sprite already translated to (sx,sy)
 function drawWeaponOnChar(ctx, p, subtype, isAtk, sAngle, swingOff) {
   if (subtype === 'bow') {
-    // Bow: D-shaped bezier, held on left side
+    // Bow: D-shaped, on RIGHT side — curve faces target, string between bow and body
     ctx.save();
-    const pull = isAtk ? 3 : 0; // string pulls back when shooting
-    // Bow limbs
+    const pull = isAtk ? 3 : 0;
     ctx.strokeStyle='#7A4520'; ctx.lineWidth=p*1.8; ctx.lineCap='round';
-    // Bow limbs — further left so they clear the character body
     ctx.beginPath();
-    ctx.moveTo(-10, -13);
-    ctx.bezierCurveTo(-26, -9, -26, 9, -10, 13);
+    ctx.moveTo(10, -12);
+    ctx.bezierCurveTo(24, -8, 24, 8, 10, 12); // curve extends RIGHT toward target
     ctx.stroke();
     // Grip
     ctx.strokeStyle='#4a2a10'; ctx.lineWidth=p*2.8;
-    ctx.beginPath(); ctx.moveTo(-12,-3); ctx.lineTo(-12,3); ctx.stroke();
-    // Bowstring
+    ctx.beginPath(); ctx.moveTo(9,-3); ctx.lineTo(9,3); ctx.stroke();
+    // String (left side of bow, between bow and body)
     ctx.strokeStyle='#d8c870'; ctx.lineWidth=p*0.45; ctx.lineCap='round';
     ctx.beginPath();
-    ctx.moveTo(-10,-13); ctx.lineTo(-10+pull,0); ctx.lineTo(-10,13);
+    ctx.moveTo(10,-12); ctx.lineTo(10-pull,0); ctx.lineTo(10,12);
     ctx.stroke();
-    // Arrow — horizontal shaft from string to front of character
-    ctx.fillStyle='#c8a060'; ctx.fillRect(-10+pull,-p*0.35,24-pull,p*0.7);
+    // Arrow: from string, pointing right toward target
+    ctx.fillStyle='#c8a060'; ctx.fillRect(10-pull,-p*0.35,18,p*0.7);
     // Arrowhead
     ctx.fillStyle='#9090a8';
-    ctx.beginPath(); ctx.moveTo(14,-p*0.85); ctx.lineTo(18,0); ctx.lineTo(14,p*0.85); ctx.closePath(); ctx.fill();
-    // Fletching (back of arrow, at string)
+    ctx.beginPath(); ctx.moveTo(28,-p*0.85); ctx.lineTo(32,0); ctx.lineTo(28,p*0.85); ctx.closePath(); ctx.fill();
+    // Fletching
     ctx.fillStyle='#b03030';
-    ctx.fillRect(-10+pull,-p*1.3,p*1.2,p*0.8); ctx.fillRect(-10+pull,p*0.5,p*1.2,p*0.8);
+    ctx.fillRect(10-pull,-p*1.3,p*1.2,p*0.8); ctx.fillRect(10-pull,p*0.5,p*1.2,p*0.8);
     ctx.restore();
   } else if (subtype === 'staff') {
     // Staff: tall rod held on right, rotates gently
@@ -2388,22 +2405,22 @@ function drawSprite(canvas, skinIdx, hairIdx, hairColIdx, cls, scale, equip) {
   const wSub = equip?.weapon?.subtype;
   if (wSub) {
     if (wSub === 'bow') {
-      // Bow: vertical D-shape on left side
+      // Bow: on right side, D-curve faces away from character
       ctx.strokeStyle='#7A4520'; ctx.lineWidth=S*1.3; ctx.lineCap='round';
       ctx.beginPath();
-      ctx.moveTo(4*S, 15*S);
-      ctx.bezierCurveTo(-1*S, 19*S, -1*S, 29*S, 4*S, 33*S);
+      ctx.moveTo(26*S, 15*S);
+      ctx.bezierCurveTo(31*S, 19*S, 31*S, 29*S, 26*S, 33*S);
       ctx.stroke();
       // Grip
       ctx.strokeStyle='#4a2a10'; ctx.lineWidth=S*2;
-      ctx.beginPath(); ctx.moveTo(3*S,23*S); ctx.lineTo(3*S,25*S); ctx.stroke();
-      // String
+      ctx.beginPath(); ctx.moveTo(27*S,23*S); ctx.lineTo(27*S,25*S); ctx.stroke();
+      // String (left side of bow)
       ctx.strokeStyle='#d8c870'; ctx.lineWidth=S*0.4;
-      ctx.beginPath(); ctx.moveTo(4*S,15*S); ctx.lineTo(4*S,33*S); ctx.stroke();
-      // Arrow
-      ctx.fillStyle='#c8a060'; ctx.fillRect(4*S, 23*S-S*0.35, 13*S, S*0.7);
+      ctx.beginPath(); ctx.moveTo(26*S,15*S); ctx.lineTo(26*S,33*S); ctx.stroke();
+      // Arrow pointing leftward (nocked, toward viewer)
+      ctx.fillStyle='#c8a060'; ctx.fillRect(13*S, 23*S-S*0.35, 13*S, S*0.7);
       ctx.fillStyle='#9090a8';
-      ctx.beginPath(); ctx.moveTo(17*S,23*S-S*0.8); ctx.lineTo(20*S,23*S); ctx.lineTo(17*S,23*S+S*0.8); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(13*S,23*S-S*0.8); ctx.lineTo(10*S,23*S); ctx.lineTo(13*S,23*S+S*0.8); ctx.closePath(); ctx.fill();
     } else if (wSub === 'sword') {
       // Sword: diagonal from right hand pointing upward
       ctx.save(); ctx.translate(26*S, 24*S); ctx.rotate(-0.75);
@@ -2516,7 +2533,7 @@ function refreshInventoryUI() {
     const sk = parseInt(localStorage.getItem('rpg_skin_tone')  || '0');
     const hs = parseInt(localStorage.getItem('rpg_hair_style') || '0');
     const hc = parseInt(localStorage.getItem('rpg_hair_color') || '0');
-    drawSprite(canvas, sk, hs, hc, rpg_char_class, 3, equipped);
+    drawSprite(canvas, sk, hs, hc, rpg_char_class, 2, equipped);
   }
 
   // Gear slots
@@ -2613,6 +2630,7 @@ function equipFromInventory(idx) {
   }
 
   equipped[slotKey] = item;
+  charSpriteDirty = true;
   refreshInventoryUI();
 
   // Persist: new item is now equipped
@@ -2629,6 +2647,7 @@ function unequipSlot(slotKey) {
   }
   inventory.push(item);
   equipped[slotKey] = null;
+  charSpriteDirty = true;
   refreshInventoryUI();
 
   // Persist: item is no longer equipped
