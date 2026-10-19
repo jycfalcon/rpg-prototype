@@ -422,9 +422,9 @@
 </div><!-- /inventory-panel -->
 
 <!-- ITEM CONTEXT MENU -->
-<div id="item-ctx" style="display:none;position:fixed;z-index:900;background:#0e0e28;border:1px solid #4040a0;font-family:'Courier New',monospace;min-width:140px;">
-  <div id="ctx-fav"     style="padding:9px 14px;cursor:pointer;font-size:10px;color:#c8c8f0;border-bottom:1px solid #2a2a50;" onmouseenter="this.style.background='#1a1a40'" onmouseleave="this.style.background=''">★ Favourite</div>
-  <div id="ctx-discard" style="padding:9px 14px;cursor:pointer;font-size:10px;color:#e06060;" onmouseenter="this.style.background='#2a1010'" onmouseleave="this.style.background=''">Discard</div>
+<div id="item-ctx" style="display:none;position:fixed;z-index:900;background:#0e0e28;border:1px solid #4040a0;font-family:'Courier New',monospace;min-width:150px;">
+  <div id="ctx-fav"     style="padding:10px 16px;cursor:pointer;font-size:11px;color:#c8c8f0;border-bottom:1px solid #2a2a50;user-select:none;">★ Favourite</div>
+  <div id="ctx-discard" style="padding:10px 16px;cursor:pointer;font-size:11px;color:#e06060;user-select:none;">Discard</div>
 </div>
 
 <!-- STAT TOOLTIP -->
@@ -1584,6 +1584,28 @@ document.addEventListener('DOMContentLoaded',()=>{
   if (grid) {
     grid.innerHTML = Array(30).fill('<div class="storage-slot"></div>').join('');
   }
+  // Context menu — use addEventListener so stopPropagation works reliably
+  const ctxEl = document.getElementById('item-ctx');
+  if (ctxEl) {
+    // Prevent clicks inside menu from bubbling to document close listener
+    ctxEl.addEventListener('click',    e => e.stopPropagation());
+    ctxEl.addEventListener('touchend', e => e.stopPropagation());
+  }
+  const favEl = document.getElementById('ctx-fav');
+  if (favEl) {
+    favEl.addEventListener('click',    e => { e.stopPropagation(); ctxFavourite(); });
+    favEl.addEventListener('touchend', e => { e.preventDefault(); e.stopPropagation(); ctxFavourite(); });
+    favEl.addEventListener('mouseenter', () => { favEl.style.background='#1a1a40'; });
+    favEl.addEventListener('mouseleave', () => { favEl.style.background=''; });
+  }
+  const disEl = document.getElementById('ctx-discard');
+  if (disEl) {
+    disEl.addEventListener('click',    e => { e.stopPropagation(); ctxDiscard(); });
+    disEl.addEventListener('touchend', e => { e.preventDefault(); e.stopPropagation(); ctxDiscard(); });
+    disEl.addEventListener('mouseenter', () => { disEl.style.background='#2a1010'; });
+    disEl.addEventListener('mouseleave', () => { disEl.style.background=''; });
+  }
+
   ['party-panel','chat-panel','worldmap-panel','storage-panel'].forEach(id=>{
     const el=document.getElementById(id);if(!el)return;
     el.addEventListener('touchstart',e=>e.stopPropagation(),{passive:true});
@@ -1776,8 +1798,11 @@ function ctxDiscard() {
     .then(({ error }) => { if (error) console.warn('discard persist:', error.message); });
 }
 
-// Close context menu on outside click
-document.addEventListener('click', () => closeCtxMenu());
+// Close context menu only when clicking OUTSIDE it
+document.addEventListener('click', e => {
+  const ctx = document.getElementById('item-ctx');
+  if (ctx && ctx.style.display !== 'none' && !ctx.contains(e.target)) closeCtxMenu();
+});
 
 // ── SPRITE RENDERER ────────────────────────────────────────────────────────
 // Used by inventory to draw the character preview
