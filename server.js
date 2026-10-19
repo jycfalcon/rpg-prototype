@@ -121,14 +121,16 @@ function awardXP(pid, amount) {
     p.state.xp      -= p.state.xpToNext;
     p.state.level   += 1;
     p.state.xpToNext = xpToNext(p.state.level);
-    p.state.statPoints += 3;
+    p.state.statPoints  += 3;
+    p.state.skillPoints += 1;
     leveledUp = true;
   }
   send(p.ws, {
     type: 'xp_update',
     xp: p.state.xp, level: p.state.level,
     xpToNext: p.state.xpToNext,
-    statPoints: p.state.statPoints,
+    statPoints:  p.state.statPoints,
+    skillPoints: p.state.skillPoints,
     leveledUp,
   });
 }
@@ -402,7 +404,7 @@ wss.on('connection', ws => {
       dead: false, facing: 'down', rolling: false,
       atkTimer: 0, atkAngle: 0, stunned: false,
       charName: 'Player', charClass: 'warrior',
-      level: 1, xp: 0, xpToNext: 100, statPoints: 0,
+      level: 1, xp: 0, xpToNext: 100, statPoints: 0, skillPoints: 0,
       skinTone: 0, hairStyle: 0, hairColor: 0,
       weaponSubtype: null,
     },
@@ -444,6 +446,7 @@ wss.on('connection', ws => {
           type: 'auth_ok', maxHp, charName: p.state.charName,
           level: p.state.level, xp: p.state.xp,
           xpToNext: p.state.xpToNext, statPoints: p.state.statPoints,
+          skillPoints: p.state.skillPoints,
         });
         return;
       }

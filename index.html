@@ -261,6 +261,42 @@
   .tt-name { font-size:13px; color:#ffffff; margin-bottom:5px; letter-spacing:0.05em; }
   .tt-meta { color:#8080c0; margin-bottom:5px; font-size:10px; }
   .tt-stat { color:#90c0ff; font-size:11px; }
+  /* ── SKILL PANEL ─────────────────────────────────────────────────── */
+  #skill-panel {
+    top:50%; left:50%; transform:translate(-50%,-50%);
+    width:440px; max-width:96vw; z-index:300; display:none;
+  }
+  .skill-pts-row { display:flex; justify-content:space-between; align-items:center; }
+  .skill-pts-badge { font-size:10px; color:#9090cc; }
+  .skill-pts-badge span { color:#f1c40f; font-weight:bold; }
+  .skill-grid-wrap {
+    display:grid; grid-template-columns:1fr 1fr; gap:8px; padding:10px;
+  }
+  .skill-card {
+    background:#0c0c20; border:1px solid #252550; padding:10px;
+    transition:border-color 0.12s;
+  }
+  .skill-card:hover { border-color:#4040a0; }
+  .sk-head { display:flex; align-items:flex-start; gap:7px; margin-bottom:5px; }
+  .sk-icon { font-size:18px; flex-shrink:0; margin-top:1px; }
+  .sk-titles { flex:1; }
+  .sk-name { font-size:10px; color:#e0e0ff; letter-spacing:0.06em; }
+  .sk-type { font-size:7px; color:#404080; letter-spacing:0.12em; margin-top:1px; }
+  .sk-lv   { font-size:11px; color:#8080d0; margin-left:auto; flex-shrink:0; }
+  .sk-desc { font-size:8px; color:#7070b0; line-height:1.55; margin-bottom:4px; }
+  .sk-bonus { font-size:8px; color:#5858a8; font-style:italic; margin-bottom:5px; }
+  .sk-pips { display:flex; gap:3px; margin-bottom:7px; }
+  .sk-pip  { flex:1; height:4px; background:#141430; border:1px solid #202050; }
+  .sk-pip.on { background:#5050c0; border-color:#8080f0; }
+  .sk-btn {
+    width:100%; padding:5px 0; font-family:'Courier New',monospace;
+    font-size:8px; letter-spacing:0.1em; cursor:pointer; border:1px solid #303080;
+    background:#0e0e28; color:#7070c0; transition:all 0.12s;
+  }
+  .sk-btn:hover:not(:disabled) { background:#1e1e50; border-color:#6060d0; color:#c0c0ff; }
+  .sk-btn:disabled { opacity:0.25; cursor:default; }
+  .sk-btn.maxed { border-color:#2a2a60; color:#404080; cursor:default; opacity:0.6; }
+
   /* Bag button */
   #bag-btn {
     position:fixed; top:10px; right:148px; z-index:200;
@@ -482,6 +518,20 @@
   </div><!-- /inv-wrap -->
 </div><!-- /inventory-panel -->
 
+<!-- SKILL PANEL -->
+<div id="skill-panel" class="rpg-panel">
+  <div class="rpg-panel-header">
+    <div class="skill-pts-row" style="width:100%">
+      <span>✦ SKILLS — <span id="skill-class-lbl"></span></span>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span class="skill-pts-badge">Points: <span id="skill-pts-val">0</span></span>
+        <span class="rpg-toggle" style="cursor:pointer" onclick="closeSkillPanel()">✕</span>
+      </div>
+    </div>
+  </div>
+  <div class="skill-grid-wrap" id="skill-grid"></div>
+</div>
+
 <!-- ITEM CONTEXT MENU -->
 <div id="item-ctx" style="display:none;position:fixed;z-index:900;background:#0e0e28;border:1px solid #4040a0;font-family:'Courier New',monospace;min-width:150px;">
   <div id="ctx-fav"     style="padding:10px 16px;cursor:pointer;font-size:11px;color:#c8c8f0;border-bottom:1px solid #2a2a50;user-select:none;">★ Favourite</div>
@@ -630,7 +680,8 @@ function connectWS() {
         playerLevel     = msg.level      || 1;
         playerXP        = msg.xp         || 0;
         playerXPToNext  = msg.xpToNext   || 100;
-        availablePoints = msg.statPoints || 0;
+        availablePoints      = msg.statPoints  || 0;
+        availableSkillPoints = msg.skillPoints || 0;
         updateXPBar();
         loadInventory();
       }
@@ -638,7 +689,8 @@ function connectWS() {
       if (msg.type === 'xp_update') {
         playerXP        = msg.xp;
         playerXPToNext  = msg.xpToNext;
-        availablePoints = msg.statPoints;
+        availablePoints      = msg.statPoints;
+        availableSkillPoints = msg.skillPoints || availableSkillPoints;
         playerLevel     = msg.level;
         updateXPBar();
         if (msg.leveledUp) {
@@ -732,7 +784,50 @@ connectWS();
 let currentMap = 'town';
 let mapW = TOWN_W, mapH = TOWN_H;
 let nearbyNpc = null, returnPortalNearby = false;
-let inventoryOpen   = false;
+let inventoryOpen         = false;
+let skillPanelOpen        = false;
+let playerSkills          = {}; // {skill_id: level}
+let availableSkillPoints  = 0;
+
+// ── SKILL DATA ─────────────────────────────────────────────────────────────
+const CLASS_SKILLS = {
+  warrior: [
+    { id:'sword_mastery', icon:'⚔️',  name:'Sword Mastery', maxLevel:5,
+      type:'passive',      req:'sword',
+      desc:'Increases ATK and STR when a sword is equipped.',
+      bonus: lv => `+${lv*3} ATK, +${lv} STR` },
+    { id:'iron_skin',     icon:'🛡️',  name:'Iron Skin',     maxLevel:5,
+      type:'passive',      req:null,
+      desc:'Permanently increases physical and magic defence.',
+      bonus: lv => `+${lv*4} DEF, +${lv*2} MDEF` },
+    { id:'battle_cry',    icon:'📣',  name:'Battle Cry',    maxLevel:5,
+      type:'active_buff',  req:null,
+      desc:'Boosts max HP and HP regen. Party in range gets the buff. Removed on death.',
+      bonus: lv => `+${lv*15}% HP, +${lv*100}% regen, ${lv*60}s` },
+    { id:'shield_bash',   icon:'💥',  name:'Shield Bash',   maxLevel:5,
+      type:'active_dmg',   req:'sword',
+      desc:'Melee strike that stuns the target. Requires sword equipped.',
+      bonus: lv => `×${(1.5+lv*0.3).toFixed(1)} ATK, ${(1.5+lv*0.5).toFixed(1)}s stun` },
+  ],
+  archer: [
+    { id:'bow_mastery',   icon:'🏹',  name:'Bow Mastery',   maxLevel:5,
+      type:'passive',      req:'bow',
+      desc:'Increases ATK and DEX when a bow is equipped.',
+      bonus: lv => `+${lv*3} ATK, +${lv} DEX` },
+    { id:'swiftness',     icon:'💨',  name:'Swiftness',     maxLevel:5,
+      type:'passive',      req:null,
+      desc:'Permanently increases movement speed and evasion.',
+      bonus: lv => `+${lv*8}% MOVE, +${lv*4} FLEE` },
+    { id:'haste',         icon:'⚡',  name:'Haste',         maxLevel:5,
+      type:'active_buff',  req:null,
+      desc:'Boosts MOVE% and ASPD. Party in range gets the buff. Removed on death.',
+      bonus: lv => `+${lv*5}% MOVE, +${lv*5} ASPD, ${lv*60}s` },
+    { id:'arrow_rain',    icon:'🌧️',  name:'Arrow Rain',    maxLevel:5,
+      type:'active_dmg',   req:'bow',
+      desc:'Ground-targeted AOE (150px cast range). Arrows rain for 2s. Slows targets.',
+      bonus: lv => `${4+lv} hits, ${20+lv*10}% slow, ${1+lv}s slow` },
+  ],
+};
 let equipped = { headgear:null, weapon:null, body:null, leg:null, boots:null, accessory1:null, accessory2:null };
 let inventory       = [];
 let pendingStats    = { strength:0, vitality:0, dexterity:0, agility:0, intelligence:0, luck:0 };
@@ -824,22 +919,14 @@ function triggerInteract(npc) {
 // so B and Escape always work regardless of focus
 document.addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
-  if (k === 'b') {
-    inventoryOpen ? closeInventory() : openInventory();
-  }
+  if (k === 'b') { inventoryOpen   ? closeInventory()   : openInventory();   }
+  if (k === 'k') { skillPanelOpen  ? closeSkillPanel()  : openSkillPanel();  }
   if (k === 'escape') {
-    if (inventoryOpen) {
-      closeInventory(); e.preventDefault();
-    } else if (document.getElementById('worldmap-panel')?.style.display !== 'none') {
-      closeWorldMap();
-    } else if (document.getElementById('storage-panel')?.style.display !== 'none') {
-      closeStoragePanel();
-    } else {
-      // Nothing open — offer to return to character select
-      if (confirm('Return to character select?')) {
-        window.location.href = 'auth.html';
-      }
-    }
+    if      (inventoryOpen)  { closeInventory();  e.preventDefault(); }
+    else if (skillPanelOpen) { closeSkillPanel(); }
+    else if (document.getElementById('worldmap-panel')?.style.display !== 'none') { closeWorldMap(); }
+    else if (document.getElementById('storage-panel')?.style.display  !== 'none') { closeStoragePanel(); }
+    else if (confirm('Return to character select?')) { window.location.href = 'auth.html'; }
   }
 }, true); // capture: true = runs before element handlers
 
@@ -1382,11 +1469,7 @@ function drawOtherChar(op){
   ctx.fillStyle=_ohr;ctx.fillRect(-3*p,-7*p,6*p,p);ctx.fillRect(-4*p,-6*p,p,3*p);ctx.fillRect(3*p,-6*p,p,3*p);
   if(op.facing!=='up'){ctx.fillStyle='#1a1a2e';ctx.fillRect(-2*p,-5*p,p,p);ctx.fillRect(p,-5*p,p,p);}
   if(!op.rolling){
-    ctx.save();ctx.rotate(sAngle+swingOff);
-    ctx.fillStyle='#7b4c2a';ctx.fillRect(8,-p,7,p*2);ctx.fillStyle='#b0b0b0';ctx.fillRect(14,-p*2,p*2,p*4);
-    ctx.fillStyle='#dcdcdc';ctx.fillRect(16,-p*0.8,22,p*1.6);ctx.fillStyle='rgba(255,255,255,0.65)';ctx.fillRect(16,-p*0.8,22,p*0.55);
-    ctx.fillStyle='#dcdcdc';ctx.beginPath();ctx.moveTo(38,-p*0.8);ctx.lineTo(38,p*0.8);ctx.lineTo(44,0);ctx.closePath();ctx.fill();
-    ctx.restore();
+    drawWeaponOnChar(ctx, p, op.weaponSubtype || 'sword', atk, sAngle, swingOff);
   }
   ctx.fillStyle='rgba(0,0,0,0.55)';ctx.fillRect(-16,-28,32,13);
   ctx.fillStyle='#7fc8ff';ctx.font='bold 9px monospace';ctx.textAlign='center';ctx.textBaseline='middle';
@@ -1432,18 +1515,54 @@ function drawChar(){
   ctx.fillStyle=_sk;ctx.fillRect(-3*p,-7*p,6*p,5*p);
   ctx.fillStyle=_hr;ctx.fillRect(-3*p,-7*p,6*p,p);ctx.fillRect(-4*p,-6*p,p,3*p);ctx.fillRect(3*p,-6*p,p,3*p);
   if(player.facing!=='up'){ctx.fillStyle='#1a1a2e';ctx.fillRect(-2*p,-5*p,p,p);ctx.fillRect(p,-5*p,p,p);}
-  if(!rolling){
-    ctx.save();ctx.rotate(sAngle+swingOff);
-    ctx.fillStyle='#7b4c2a';ctx.fillRect(8,-p,7,p*2);ctx.fillStyle='#b0b0b0';ctx.fillRect(14,-p*2,p*2,p*4);
-    ctx.fillStyle='#dcdcdc';ctx.fillRect(16,-p*0.8,22,p*1.6);ctx.fillStyle='rgba(255,255,255,0.65)';ctx.fillRect(16,-p*0.8,22,p*0.55);
-    ctx.fillStyle='#dcdcdc';ctx.beginPath();ctx.moveTo(38,-p*0.8);ctx.lineTo(38,p*0.8);ctx.lineTo(44,0);ctx.closePath();ctx.fill();
-    ctx.restore();
-  }
+  if(!rolling){ drawWeaponOnChar(ctx, p, equipped.weapon?.subtype || 'sword', player.atkTimer>0, sAngle, swingOff); }
   if(stunned){
     const t=Date.now()*0.004;
     for(let i=0;i<4;i++){const a=t+(i*Math.PI/2);const sx2=Math.cos(a)*16,sy2=-16+Math.sin(a)*6;ctx.fillStyle='#f1c40f';ctx.beginPath();ctx.arc(sx2,sy2,3,0,Math.PI*2);ctx.fill();}
   }
   ctx.restore();
+}
+
+// Draws weapon on a character sprite already translated to (sx,sy)
+function drawWeaponOnChar(ctx, p, subtype, isAtk, sAngle, swingOff) {
+  if (subtype === 'bow') {
+    // Bow: held on left side, doesn't rotate with attack angle
+    ctx.save();
+    const drawP = isAtk ? 0.85 : 1; // slight draw-back when attacking
+    ctx.strokeStyle='#8B5A2B'; ctx.lineWidth=p*1.4; ctx.lineCap='round';
+    ctx.beginPath();
+    ctx.arc(-14*drawP, 0, 9, -Math.PI*0.65, Math.PI*0.65);
+    ctx.stroke();
+    ctx.strokeStyle='#d4b870'; ctx.lineWidth=p*0.35;
+    ctx.beginPath();
+    ctx.moveTo(-14*drawP + 9*Math.cos(-Math.PI*0.65), 9*Math.sin(-Math.PI*0.65));
+    ctx.lineTo(-14*drawP + 9*Math.cos( Math.PI*0.65), 9*Math.sin( Math.PI*0.65));
+    ctx.stroke();
+    // Arrow shaft
+    ctx.fillStyle='#c8a060'; ctx.fillRect(-11, -p*0.35, 16, p*0.7);
+    ctx.fillStyle='#808898';
+    ctx.beginPath(); ctx.moveTo(5,-p*0.7); ctx.lineTo(9,0); ctx.lineTo(5,p*0.7); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  } else if (subtype === 'staff') {
+    // Staff: tall rod held on right, rotates gently
+    ctx.save(); ctx.rotate(sAngle * 0.3 + swingOff * 0.3);
+    ctx.fillStyle='#8B5A2B'; ctx.fillRect(7, -p*0.4, 28, p*0.8);
+    ctx.fillStyle='#6060e8';
+    ctx.beginPath(); ctx.arc(37, 0, p*2.2, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle='rgba(180,180,255,0.55)';
+    ctx.beginPath(); ctx.arc(35, -2, p, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  } else {
+    // Sword (default): rotates with attack
+    ctx.save(); ctx.rotate(sAngle + swingOff);
+    ctx.fillStyle='#7b4c2a'; ctx.fillRect(8,-p,7,p*2);
+    ctx.fillStyle='#b0b0b0'; ctx.fillRect(14,-p*2,p*2,p*4);
+    ctx.fillStyle='#dcdcdc'; ctx.fillRect(16,-p*0.8,22,p*1.6);
+    ctx.fillStyle='rgba(255,255,255,0.65)'; ctx.fillRect(16,-p*0.8,22,p*0.55);
+    ctx.fillStyle='#dcdcdc';
+    ctx.beginPath(); ctx.moveTo(38,-p*0.8); ctx.lineTo(38,p*0.8); ctx.lineTo(44,0); ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
 }
 
 function drawRollTrail(){for(const t of rollTrail){const[tsx,tsy]=scr(t.x,t.y);ctx.save();ctx.globalAlpha=t.alpha;ctx.fillStyle='#88aaff';ctx.beginPath();ctx.ellipse(tsx,tsy,8,11,rollAngle,0,Math.PI*2);ctx.fill();ctx.restore();}}
@@ -1764,7 +1883,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     disEl.addEventListener('mouseleave', () => { disEl.style.background=''; });
   }
 
-  ['party-panel','chat-panel','worldmap-panel','storage-panel'].forEach(id=>{
+  ['party-panel','chat-panel','worldmap-panel','storage-panel','skill-panel'].forEach(id=>{
     const el=document.getElementById(id);if(!el)return;
     el.addEventListener('touchstart',e=>e.stopPropagation(),{passive:true});
     el.addEventListener('touchmove', e=>e.stopPropagation(),{passive:true});
@@ -1819,6 +1938,21 @@ function doMapTransition(callback){
   }, 300);
 }
 
+// ── PASSIVE SKILL BONUSES ─────────────────────────────────────────────────
+function getPassiveBonuses() {
+  const b = { atk:0, def:0, mdef:0, str:0, dex:0, flee:0, move_pct:0 };
+  const wSub = equipped.weapon?.subtype;
+  const sm = playerSkills.sword_mastery || 0;
+  if (sm > 0 && wSub === 'sword') { b.atk += sm*3; b.str += sm; }
+  const isl = playerSkills.iron_skin || 0;
+  if (isl > 0) { b.def += isl*4; b.mdef += isl*2; }
+  const bm = playerSkills.bow_mastery || 0;
+  if (bm > 0 && wSub === 'bow') { b.atk += bm*3; b.dex += bm; }
+  const sw = playerSkills.swiftness || 0;
+  if (sw > 0) { b.flee += sw*4; b.move_pct += sw*8; }
+  return b;
+}
+
 // ── STORAGE ───────────────────────────────────────────────────────────────
 // Quick derived-stat helpers for state broadcast — server uses these for damage
 // Effective attack range — reads weapon range stat if present, else melee default
@@ -1828,27 +1962,92 @@ function getEffectiveRange() {
 }
 
 function _computeCurrentAtk() {
-  const base = getBaseStats();
-  const p    = pendingStats;
-  const str  = (base.strength || 0) + (p.strength || 0);
+  const base = getBaseStats(); const p = pendingStats;
+  const pb   = getPassiveBonuses();
+  const str  = (base.strength || 0) + (p.strength || 0) + pb.str;
   const wAtk = equipped.weapon?.stats?.atk || 0;
-  return wAtk + Math.floor(str * 0.5);
+  return wAtk + Math.floor(str * 0.5) + pb.atk;
 }
 function _computeCurrentDef() {
-  const base = getBaseStats();
-  const p    = pendingStats;
+  const base = getBaseStats(); const p = pendingStats;
+  const pb   = getPassiveBonuses();
   const vit  = (base.vitality || 0) + (p.vitality || 0);
   let gearDef = 0;
   for (const item of Object.values(equipped)) gearDef += item?.stats?.def || 0;
-  return gearDef + Math.floor(vit * 1.5);
+  return gearDef + Math.floor(vit * 1.5) + pb.def;
 }
 function _computeCurrentMdef() {
-  const base = getBaseStats();
-  const p    = pendingStats;
+  const base = getBaseStats(); const p = pendingStats;
+  const pb   = getPassiveBonuses();
   const int_ = (base.intelligence || 0) + (p.intelligence || 0);
   let gearMdef = 0;
   for (const item of Object.values(equipped)) gearMdef += item?.stats?.mdef || 0;
-  return gearMdef + Math.floor(int_ * 1.5);
+  return gearMdef + Math.floor(int_ * 1.5) + pb.mdef;
+}
+
+// ── SKILL PANEL ───────────────────────────────────────────────────────────
+function openSkillPanel() {
+  skillPanelOpen = true;
+  closeInventory(); closeWorldMap(); closeStoragePanel();
+  document.getElementById('skill-panel').style.display = 'block';
+  renderSkillPanel();
+}
+function closeSkillPanel() {
+  skillPanelOpen = false;
+  document.getElementById('skill-panel').style.display = 'none';
+}
+
+function renderSkillPanel() {
+  const skills = CLASS_SKILLS[rpg_char_class] || [];
+  const lbl = document.getElementById('skill-class-lbl');
+  if (lbl) lbl.textContent = rpg_char_class.charAt(0).toUpperCase() + rpg_char_class.slice(1);
+  const pts = document.getElementById('skill-pts-val');
+  if (pts) pts.textContent = availableSkillPoints;
+  const grid = document.getElementById('skill-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  for (const skill of skills) {
+    const lv  = playerSkills[skill.id] || 0;
+    const maxed = lv >= skill.maxLevel;
+    const canLearn = availableSkillPoints > 0 && !maxed;
+    const typeLabel = skill.type === 'passive' ? 'PASSIVE' :
+                      skill.type === 'active_buff' ? 'ACTIVE · BUFF' : 'ACTIVE · DMG';
+    const pips = Array.from({length: skill.maxLevel}, (_, i) =>
+      `<div class="sk-pip${i < lv ? ' on' : ''}"></div>`).join('');
+    const btnLabel = lv === 0 ? 'LEARN' : maxed ? 'MAXED' : 'UPGRADE';
+    const card = document.createElement('div');
+    card.className = 'skill-card';
+    card.innerHTML = `
+      <div class="sk-head">
+        <span class="sk-icon">${skill.icon}</span>
+        <div class="sk-titles">
+          <div class="sk-name">${skill.name}</div>
+          <div class="sk-type">${typeLabel}</div>
+        </div>
+        ${lv > 0 ? `<span class="sk-lv">Lv ${lv}</span>` : ''}
+      </div>
+      <div class="sk-desc">${skill.desc}${skill.req ? ` <span style="color:#404080">[${skill.req}]</span>` : ''}</div>
+      ${!maxed ? `<div class="sk-bonus">Next: ${skill.bonus(lv+1)}</div>` : `<div class="sk-bonus" style="color:#5050a0">MAX — ${skill.bonus(lv)}</div>`}
+      <div class="sk-pips">${pips}</div>
+      <button class="sk-btn${maxed?' maxed':''}"
+        onclick="learnSkill('${skill.id}')"
+        ${(!canLearn || maxed) ? 'disabled' : ''}>${btnLabel}</button>`;
+    grid.appendChild(card);
+  }
+}
+
+function learnSkill(skillId) {
+  if (availableSkillPoints <= 0) return;
+  const skills = CLASS_SKILLS[rpg_char_class] || [];
+  const skill  = skills.find(s => s.id === skillId);
+  if (!skill) return;
+  const lv = playerSkills[skillId] || 0;
+  if (lv >= skill.maxLevel) return;
+  availableSkillPoints--;
+  playerSkills[skillId] = lv + 1;
+  renderSkillPanel();
+  if (inventoryOpen) refreshStatsPanel(); // derived stats may change
 }
 
 function updateXPBar() {
@@ -2196,24 +2395,26 @@ function computeDerived(base, pending) {
     gearMdef += item.stats.mdef || 0;
   }
 
+  const pb      = getPassiveBonuses();
   const aspd    = Math.min(200, 100 + agi * 2);
   const castRed = -Math.min(70, Math.floor(dex * 0.5 + int_ * 0.2));
   const hpRegen = (maxHp * 0.02).toFixed(1);
   const mpRegen = (maxMp * 0.03).toFixed(1);
+  const movePct = 100 + pb.move_pct;
 
   return {
-    HP:   { val: maxHp,                          sub: `Regen ${hpRegen} / sec` },
-    MP:   { val: maxMp,                          sub: `Regen ${mpRegen} / sec` },
-    ATK:  { val: wAtk  + Math.floor(str  * 0.5), sub: null },
-    MATK: { val: wMatk + Math.floor(int_ * 0.5), sub: null },
-    DEF:  { val: gearDef  + Math.floor(vit  * 1.5), sub: gearDef  > 0 ? `Base ${Math.floor(vit*1.5)} + gear ${gearDef}` : null },
-    MDEF: { val: gearMdef + Math.floor(int_ * 1.5), sub: gearMdef > 0 ? `Base ${Math.floor(int_*1.5)} + gear ${gearMdef}` : null },
-    HIT:  { val: dex * 2,  sub: null },
-    FLEE: { val: agi * 2,  sub: null },
+    HP:   { val: maxHp,  sub: `Regen ${hpRegen} / sec` },
+    MP:   { val: maxMp,  sub: `Regen ${mpRegen} / sec` },
+    ATK:  { val: wAtk  + Math.floor((str  + pb.str) * 0.5) + pb.atk,  sub: pb.atk  > 0 ? `Includes +${pb.atk} passive` : null },
+    MATK: { val: wMatk + Math.floor(int_ * 0.5),  sub: null },
+    DEF:  { val: gearDef  + Math.floor(vit  * 1.5) + pb.def,  sub: pb.def  > 0 ? `Includes +${pb.def} passive` : null },
+    MDEF: { val: gearMdef + Math.floor(int_ * 1.5) + pb.mdef, sub: pb.mdef > 0 ? `Includes +${pb.mdef} passive` : null },
+    HIT:  { val: (dex + pb.dex) * 2,  sub: null },
+    FLEE: { val: agi * 2 + pb.flee,   sub: pb.flee > 0 ? `Includes +${pb.flee} passive` : null },
     CRIT: { val: Math.floor(luk * 0.5) + '%', sub: 'Physical only' },
-    ASPD: { val: aspd,     sub: aspd >= 200 ? 'Cap reached' : `Cap: 200` },
+    ASPD: { val: aspd,  sub: aspd >= 200 ? 'Cap reached' : 'Cap: 200' },
     CAST: { val: castRed === 0 ? '0%' : castRed + '%', sub: castRed <= -70 ? 'Cap reached' : 'Cap: −70%' },
-    MOVE: { val: '100%',   sub: 'Buffs/debuffs apply in %' },
+    MOVE: { val: movePct + '%', sub: pb.move_pct > 0 ? `+${pb.move_pct}% from Swiftness` : 'Buffs/debuffs apply in %' },
   };
 }
 
