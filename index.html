@@ -1237,7 +1237,6 @@ function drawSlime(s){
     ctx.strokeStyle=prog>0.65?'#ff0000':'#ff6600';ctx.lineWidth=prog>0.65?4:2.5;
     ctx.beginPath();ctx.arc(0,0,s.earthquakeRadius,0,Math.PI*2);ctx.stroke();ctx.restore();
   }
-  }
   if(isTarget){
     const pulse=0.55+0.45*Math.sin(Date.now()*0.006);
     ctx.save();ctx.strokeStyle=s.isKing?'#a855f7':'#f1c40f';ctx.lineWidth=s.isKing?3:2.5;ctx.globalAlpha=pulse;
