@@ -404,7 +404,7 @@ wss.on('connection', ws => {
       dead: false, facing: 'down', rolling: false,
       atkTimer: 0, atkAngle: 0, stunned: false,
       charName: 'Player', charClass: 'warrior',
-      level: 1, xp: 0, xpToNext: 100, statPoints: 0, skillPoints: 0,
+      level: 1, xp: 0, xpToNext: 100, statPoints: 0, skillPoints: 1,
       skinTone: 0, hairStyle: 0, hairColor: 0,
       weaponSubtype: null,
     },

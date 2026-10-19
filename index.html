@@ -297,17 +297,31 @@
   .sk-btn:disabled { opacity:0.25; cursor:default; }
   .sk-btn.maxed { border-color:#2a2a60; color:#404080; cursor:default; opacity:0.6; }
 
-  /* Bag button */
-  #bag-btn {
-    position:fixed; top:10px; right:148px; z-index:200;
+  /* Skill + Bag buttons */
+  #skill-btn, #bag-btn {
+    position:fixed; top:10px; z-index:200;
     background:rgba(8,8,18,0.82); border:1px solid #2a3050; border-radius:3px;
     color:#aaa; font-size:14px; width:32px; height:22px;
     cursor:pointer; display:flex; align-items:center; justify-content:center;
     padding:0; transition:border-color 0.15s,color 0.15s; user-select:none;
     font-family:inherit;
   }
-  #bag-btn:hover { border-color:#4a5080; color:#eee; }
-  #bag-btn.open  { border-color:#5050b0; color:#a0a0f0; background:rgba(20,20,60,0.9); }
+  #skill-btn { right:184px; }
+  #skill-btn:hover, #bag-btn:hover { border-color:#4a5080; color:#eee; }
+  #skill-btn.open  { border-color:#5050b0; color:#a0a0f0; background:rgba(20,20,60,0.9); }
+  @media (max-width:768px) {
+    #skill-btn { right:52px; top:38px; width:36px; height:28px; font-size:16px; }
+  }
+  /* Bag button */
+  #bag-btn {
+    right:148px;
+    background:rgba(8,8,18,0.82); border:1px solid #2a3050; border-radius:3px;
+    color:#aaa; font-size:14px; width:32px; height:22px;
+    cursor:pointer; display:flex; align-items:center; justify-content:center;
+    padding:0; transition:border-color 0.15s,color 0.15s; user-select:none;
+    font-family:inherit;
+  }
+  #bag-btn.open { border-color:#5050b0; color:#a0a0f0; background:rgba(20,20,60,0.9); }
   @media (max-width:768px) {
     .inv-body { flex-direction:column; overflow-y:auto; }
     .inv-left { width:100%; }
@@ -414,7 +428,8 @@
 </div>
 
 <!-- BAG BUTTON — always visible, opens inventory -->
-<button id="bag-btn" onclick="inventoryOpen ? closeInventory() : openInventory()" title="Inventory [B]">🎒</button>
+<button id="skill-btn" onclick="skillPanelOpen ? closeSkillPanel() : openSkillPanel()" title="Skills [K]">📖</button>
+<button id="bag-btn"   onclick="inventoryOpen   ? closeInventory()   : openInventory()"   title="Inventory [B]">🎒</button>
 
 <!-- INVENTORY PANEL -->
 <div id="inventory-panel">
@@ -618,7 +633,7 @@ const CLASS_STARTING_STATS = {
 // ── GAME CONSTANTS ────────────────────────────────────────────────────────
 const P_SPEED=130, P_ATK=3, P_REGEN=1;
 const ATK_RANGE=50, ATK_DURATION=0.3, ATK_CD=0.55;
-const SWORD_IDLE=Math.PI*0.15;
+const SWORD_IDLE=-Math.PI*0.42; // sword held upright, ready to swing down
 const ROLL_SPEED=340, ROLL_DURATION=0.36, ROLL_CD=1.6;
 const STUN_DURATION=5.0;
 const S_HP=15, G_HP=70, K_HP=200;
@@ -1469,7 +1484,7 @@ function drawOtherChar(op){
   ctx.fillStyle=_ohr;ctx.fillRect(-3*p,-7*p,6*p,p);ctx.fillRect(-4*p,-6*p,p,3*p);ctx.fillRect(3*p,-6*p,p,3*p);
   if(op.facing!=='up'){ctx.fillStyle='#1a1a2e';ctx.fillRect(-2*p,-5*p,p,p);ctx.fillRect(p,-5*p,p,p);}
   if(!op.rolling){
-    drawWeaponOnChar(ctx, p, op.weaponSubtype || 'sword', atk, sAngle, swingOff);
+    if (op.weaponSubtype) drawWeaponOnChar(ctx, p, op.weaponSubtype, atk, sAngle, swingOff);
   }
   ctx.fillStyle='rgba(0,0,0,0.55)';ctx.fillRect(-16,-28,32,13);
   ctx.fillStyle='#7fc8ff';ctx.font='bold 9px monospace';ctx.textAlign='center';ctx.textBaseline='middle';
@@ -1515,7 +1530,7 @@ function drawChar(){
   ctx.fillStyle=_sk;ctx.fillRect(-3*p,-7*p,6*p,5*p);
   ctx.fillStyle=_hr;ctx.fillRect(-3*p,-7*p,6*p,p);ctx.fillRect(-4*p,-6*p,p,3*p);ctx.fillRect(3*p,-6*p,p,3*p);
   if(player.facing!=='up'){ctx.fillStyle='#1a1a2e';ctx.fillRect(-2*p,-5*p,p,p);ctx.fillRect(p,-5*p,p,p);}
-  if(!rolling){ drawWeaponOnChar(ctx, p, equipped.weapon?.subtype || 'sword', player.atkTimer>0, sAngle, swingOff); }
+  if(!rolling && equipped.weapon?.subtype) { drawWeaponOnChar(ctx, p, equipped.weapon.subtype, player.atkTimer>0, sAngle, swingOff); }
   if(stunned){
     const t=Date.now()*0.004;
     for(let i=0;i<4;i++){const a=t+(i*Math.PI/2);const sx2=Math.cos(a)*16,sy2=-16+Math.sin(a)*6;ctx.fillStyle='#f1c40f';ctx.beginPath();ctx.arc(sx2,sy2,3,0,Math.PI*2);ctx.fill();}
@@ -1526,22 +1541,31 @@ function drawChar(){
 // Draws weapon on a character sprite already translated to (sx,sy)
 function drawWeaponOnChar(ctx, p, subtype, isAtk, sAngle, swingOff) {
   if (subtype === 'bow') {
-    // Bow: held on left side, doesn't rotate with attack angle
+    // Bow: D-shaped bezier, held on left side
     ctx.save();
-    const drawP = isAtk ? 0.85 : 1; // slight draw-back when attacking
-    ctx.strokeStyle='#8B5A2B'; ctx.lineWidth=p*1.4; ctx.lineCap='round';
+    const pull = isAtk ? 3 : 0; // string pulls back when shooting
+    // Bow limbs
+    ctx.strokeStyle='#7A4520'; ctx.lineWidth=p*1.8; ctx.lineCap='round';
     ctx.beginPath();
-    ctx.arc(-14*drawP, 0, 9, -Math.PI*0.65, Math.PI*0.65);
+    ctx.moveTo(-5, -13);
+    ctx.bezierCurveTo(-20, -9, -20, 9, -5, 13);
     ctx.stroke();
-    ctx.strokeStyle='#d4b870'; ctx.lineWidth=p*0.35;
+    // Grip
+    ctx.strokeStyle='#4a2a10'; ctx.lineWidth=p*2.8;
+    ctx.beginPath(); ctx.moveTo(-7,-3); ctx.lineTo(-7,3); ctx.stroke();
+    // Bowstring
+    ctx.strokeStyle='#d8c870'; ctx.lineWidth=p*0.45; ctx.lineCap='round';
     ctx.beginPath();
-    ctx.moveTo(-14*drawP + 9*Math.cos(-Math.PI*0.65), 9*Math.sin(-Math.PI*0.65));
-    ctx.lineTo(-14*drawP + 9*Math.cos( Math.PI*0.65), 9*Math.sin( Math.PI*0.65));
+    ctx.moveTo(-5,-13); ctx.lineTo(-5+pull,0); ctx.lineTo(-5,13);
     ctx.stroke();
     // Arrow shaft
-    ctx.fillStyle='#c8a060'; ctx.fillRect(-11, -p*0.35, 16, p*0.7);
-    ctx.fillStyle='#808898';
-    ctx.beginPath(); ctx.moveTo(5,-p*0.7); ctx.lineTo(9,0); ctx.lineTo(5,p*0.7); ctx.closePath(); ctx.fill();
+    ctx.fillStyle='#c8a060'; ctx.fillRect(-5+pull,-p*0.35,18-pull,p*0.7);
+    // Arrowhead
+    ctx.fillStyle='#9090a8';
+    ctx.beginPath(); ctx.moveTo(13,-p*0.8); ctx.lineTo(17,0); ctx.lineTo(13,p*0.8); ctx.closePath(); ctx.fill();
+    // Fletching
+    ctx.fillStyle='#b03030';
+    ctx.fillRect(-5+pull,-p*1.3,3,p*0.8); ctx.fillRect(-5+pull,p*0.5,3,p*0.8);
     ctx.restore();
   } else if (subtype === 'staff') {
     // Staff: tall rod held on right, rotates gently
@@ -1990,11 +2014,13 @@ function openSkillPanel() {
   skillPanelOpen = true;
   closeInventory(); closeWorldMap(); closeStoragePanel();
   document.getElementById('skill-panel').style.display = 'block';
+  document.getElementById('skill-btn').classList.add('open');
   renderSkillPanel();
 }
 function closeSkillPanel() {
   skillPanelOpen = false;
   document.getElementById('skill-panel').style.display = 'none';
+  document.getElementById('skill-btn').classList.remove('open');
 }
 
 function renderSkillPanel() {
@@ -2018,6 +2044,9 @@ function renderSkillPanel() {
     const btnLabel = lv === 0 ? 'LEARN' : maxed ? 'MAXED' : 'UPGRADE';
     const card = document.createElement('div');
     card.className = 'skill-card';
+    // Cursor hint
+    card.style.cursor = canLearn ? 'pointer' : maxed ? 'default' : 'not-allowed';
+    card.title = maxed ? 'Maxed' : canLearn ? 'Click to learn · Right-click to unlearn' : lv > 0 ? 'Right-click to unlearn' : 'No skill points';
     card.innerHTML = `
       <div class="sk-head">
         <span class="sk-icon">${skill.icon}</span>
@@ -2025,14 +2054,17 @@ function renderSkillPanel() {
           <div class="sk-name">${skill.name}</div>
           <div class="sk-type">${typeLabel}</div>
         </div>
-        ${lv > 0 ? `<span class="sk-lv">Lv ${lv}</span>` : ''}
+        <span class="sk-lv">${lv > 0 ? `Lv ${lv}` : ''}</span>
       </div>
       <div class="sk-desc">${skill.desc}${skill.req ? ` <span style="color:#404080">[${skill.req}]</span>` : ''}</div>
       ${!maxed ? `<div class="sk-bonus">Next: ${skill.bonus(lv+1)}</div>` : `<div class="sk-bonus" style="color:#5050a0">MAX — ${skill.bonus(lv)}</div>`}
       <div class="sk-pips">${pips}</div>
-      <button class="sk-btn${maxed?' maxed':''}"
-        onclick="learnSkill('${skill.id}')"
-        ${(!canLearn || maxed) ? 'disabled' : ''}>${btnLabel}</button>`;
+      <div style="font-size:7px;color:#303060;text-align:center;margin-top:4px;">
+        ${maxed ? 'MAXED' : canLearn ? '▲ click to learn' : lv > 0 ? '' : 'no points'}
+        ${lv > 0 && !maxed ? ' · ▼ right-click to unlearn' : lv > 0 ? ' · ▼ right-click to unlearn' : ''}
+      </div>`;
+    card.addEventListener('click', () => learnSkill(skill.id));
+    card.addEventListener('contextmenu', e => { e.preventDefault(); unlearnSkill(skill.id); });
     grid.appendChild(card);
   }
 }
@@ -2047,7 +2079,16 @@ function learnSkill(skillId) {
   availableSkillPoints--;
   playerSkills[skillId] = lv + 1;
   renderSkillPanel();
-  if (inventoryOpen) refreshStatsPanel(); // derived stats may change
+  if (inventoryOpen) refreshStatsPanel();
+}
+
+function unlearnSkill(skillId) {
+  const lv = playerSkills[skillId] || 0;
+  if (lv <= 0) return;
+  playerSkills[skillId] = lv - 1;
+  availableSkillPoints++;
+  renderSkillPanel();
+  if (inventoryOpen) refreshStatsPanel();
 }
 
 function updateXPBar() {
