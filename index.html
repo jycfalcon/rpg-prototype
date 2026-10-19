@@ -33,6 +33,11 @@
     flex-direction: column; /* header stays put, body scrolls */
   }
   #storage-panel .rpg-panel-header { flex-shrink: 0; }
+  /* More specific than .rpg-panel-body { display:block } */
+  #storage-panel .rpg-panel-body {
+    display: flex; gap: 0; flex: 1;
+    overflow: hidden; min-height: 0;
+  }
   .storage-body {
     display: flex; gap: 0; flex: 1;
     overflow: hidden; min-height: 0;
@@ -71,9 +76,10 @@
     padding: 5px 8px; border-top: 1px solid #1a1a30; flex-shrink: 0;
   }
   @media (max-width: 768px) {
-    #storage-panel { width: 96vw; max-height: 92vh; }
-    .storage-body  { flex-direction: column; }
-    .storage-col-left { border-right: none; border-bottom: 1px solid #2a2a50; max-height: 45%; }
+    #storage-panel { width: 96vw; max-height: 92vh; height: 92vh; }
+    .storage-body  { flex-direction: column; flex: 1; min-height: 0; }
+    .storage-col   { flex: 1; min-height: 0; overflow: hidden; }
+    .storage-col-left { border-right: none; border-bottom: 1px solid #2a2a50; }
     .storage-item-grid { grid-template-columns: repeat(5, 1fr); }
   }
   #map-fade {
