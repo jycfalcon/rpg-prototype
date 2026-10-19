@@ -261,6 +261,27 @@
   .tt-name { font-size:13px; color:#ffffff; margin-bottom:5px; letter-spacing:0.05em; }
   .tt-meta { color:#8080c0; margin-bottom:5px; font-size:10px; }
   .tt-stat { color:#90c0ff; font-size:11px; }
+  /* ── SKILL BAR ───────────────────────────────────────────────────── */
+  #skill-bar {
+    position:fixed; bottom:82px; left:50%; transform:translateX(-50%);
+    display:flex; gap:5px; z-index:200; pointer-events:all;
+  }
+  .sk-bar-slot {
+    width:48px; height:48px; background:rgba(8,8,18,0.88);
+    border:1px solid #2a3050; border-radius:4px;
+    position:relative; cursor:pointer; user-select:none;
+    display:flex; align-items:center; justify-content:center;
+    transition:border-color 0.15s;
+  }
+  .sk-bar-slot.has-skill { border-color:#303880; }
+  .sk-bar-slot.has-skill:hover { border-color:#6060c0; }
+  .sk-bar-slot.buff-active { border-color:#5580ff; box-shadow:0 0 8px rgba(80,120,255,0.45); }
+  .sk-bar-icon { font-size:20px; pointer-events:none; line-height:1; }
+  .sk-bar-key  { position:absolute; bottom:2px; right:4px; font-size:8px; color:#3a4060; font-family:'Courier New',monospace; pointer-events:none; }
+  .sk-bar-cd   { position:absolute; inset:0; pointer-events:none; border-radius:3px; }
+  .sk-bar-mp   { position:absolute; top:2px; left:3px; font-size:7px; color:#6080ff; font-family:'Courier New',monospace; pointer-events:none; }
+  @media (max-width:768px) { #skill-bar { bottom:100px; } }
+
   /* ── SKILL PANEL ─────────────────────────────────────────────────── */
   #skill-panel {
     top:50%; left:50%; transform:translate(-50%,-50%);
@@ -426,6 +447,9 @@
     <div id="xp-fill" style="height:100%;background:#c8a800;width:0%;transition:width 0.4s;"></div>
   </div>
 </div>
+
+<!-- SKILL BAR -->
+<div id="skill-bar"></div>
 
 <!-- BAG BUTTON — always visible, opens inventory -->
 <button id="skill-btn" onclick="skillPanelOpen ? closeSkillPanel() : openSkillPanel()" title="Skills [K]">📖</button>
@@ -699,6 +723,7 @@ function connectWS() {
         availableSkillPoints = msg.skillPoints || 0;
         charSpriteDirty = true;
         updateXPBar();
+        initSkillSystem();
         loadInventory();
       }
 
@@ -766,7 +791,7 @@ function connectWS() {
           burst(player.x, player.y, '#e74c3c', 5);
           spawnImpact(player.x, player.y - 10, '#ffffff');
           if (msg.stun && !player.dead) { stunned=true; stunTimer=msg.stun; addFloat(player.x, player.y-44, 'STUNNED!', '#f1c40f', 20); }
-          if (player.hp <= 0) player.dead = true;
+          if (player.hp <= 0) { player.dead = true; activeBuffs = {}; renderSkillBar(); }
         }
       }
       if (msg.type === 'slime_hit') {
@@ -790,7 +815,11 @@ function connectWS() {
         const s = slimes.find(s => s.id === msg.slimeId);
         if (s) addFloat(s.x, s.y-s.r-10, msg.isKing?'👑!':'!', msg.isKing?'#a855f7':'#e74c3c', msg.isKing?16:14);
       }
-      if (msg.type === 'float') { addFloat(msg.x, msg.y, msg.text, msg.color, msg.size); }
+      if (msg.type === 'float')      { addFloat(msg.x, msg.y, msg.text, msg.color, msg.size); }
+      if (msg.type === 'skill_buff') { applyServerBuff(msg); }
+      if (msg.type === 'skill_hit')  {
+        if (msg.skillId === 'arrow_rain') spawnImpact(msg.x, msg.y, '#88bbff');
+      }
     } catch(_) {}
   };
 }
@@ -937,8 +966,9 @@ function triggerInteract(npc) {
 // so B and Escape always work regardless of focus
 document.addEventListener('keydown', e => {
   const k = e.key.toLowerCase();
-  if (k === 'b') { inventoryOpen   ? closeInventory()   : openInventory();   }
-  if (k === 'k') { skillPanelOpen  ? closeSkillPanel()  : openSkillPanel();  }
+  if (k === 'b') { inventoryOpen  ? closeInventory()  : openInventory();  }
+  if (k === 'k') { skillPanelOpen ? closeSkillPanel() : openSkillPanel(); }
+  if (k>='1'&&k<='4' && !inventoryOpen && !skillPanelOpen) { useSkillSlot(parseInt(k)-1); }
   if (k === 'escape') {
     if      (inventoryOpen)  { closeInventory();  e.preventDefault(); }
     else if (skillPanelOpen) { closeSkillPanel(); }
@@ -1141,8 +1171,9 @@ function update(dt) {
       if(keys['a']||keys['arrowleft'])dx-=1;if(keys['d']||keys['arrowright'])dx+=1;
       dx+=joy.dx;dy+=joy.dy;
       const mag=Math.hypot(dx,dy);if(mag>1){dx/=mag;dy/=mag;}
-      player.x=clamp(player.x+dx*P_SPEED*dt,12,mapW-12);
-      player.y=clamp(player.y+dy*P_SPEED*dt,12,mapH-12);
+      const _spd=getEffectiveMoveSpeed();
+      player.x=clamp(player.x+dx*_spd*dt,12,mapW-12);
+      player.y=clamp(player.y+dy*_spd*dt,12,mapH-12);
       if(mag>0.05&&!targetSlime){if(Math.abs(dx)>=Math.abs(dy))player.facing=dx>0?'right':'left';else player.facing=dy>0?'down':'up';}
     }
   }
@@ -1150,6 +1181,13 @@ function update(dt) {
   if(player.atkCd>0)player.atkCd-=dt;if(player.atkTimer>0)player.atkTimer-=dt;
   if(player.flash>0)player.flash-=dt;if(atkBtnFlash>0)atkBtnFlash-=dt;
   if(rollBtnFlash>0)rollBtnFlash-=dt;if(talkBtnFlash>0)talkBtnFlash-=dt;
+  // Haste speed trail
+  if (activeBuffs.haste && !player.dead) {
+    const _anyMov = keys['w']||keys['s']||keys['a']||keys['d']||Math.hypot(joy.dx,joy.dy)>0.1||autoMove;
+    if (_anyMov && Math.random() < 0.4) {
+      particles.push({x:player.x+(Math.random()-0.5)*8,y:player.y+(Math.random()-0.5)*8,vx:(Math.random()-0.5)*20,vy:(Math.random()-0.5)*20,color:'#00ddff',sz:2+Math.random()*2,life:0.25+Math.random()*0.2,max:0.45});
+    }
+  }
   // Walk cycle — drives leg animation
   const _anyMove = !rolling && !player.dead && (
     keys['w']||keys['s']||keys['a']||keys['d']||
@@ -1159,7 +1197,13 @@ function update(dt) {
   if (_anyMove) walkCycle += dt * 9; else walkCycle = 0;
   // Impact effects
   impacts = impacts.filter(i => { i.life -= dt; return i.life > 0; });
-  player.regen+=dt;if(player.regen>=1){player.regen-=1;player.hp=Math.min(playerMaxHp,player.hp+P_REGEN);}
+  player.regen+=dt;if(player.regen>=1){player.regen-=1;player.hp=Math.min(playerMaxHp,player.hp+P_REGEN*getEffectiveHpRegenMult());}
+  // MP regen: 3% of max per second
+  mpRegenAcc+=dt;if(mpRegenAcc>=1){mpRegenAcc-=1;playerMP=Math.min(playerMaxMp,playerMP+(playerMaxMp*0.03));}
+  // Buff expiry
+  for (const [id,buff] of Object.entries(activeBuffs)) { if (Date.now()>=buff.expiresAt) { delete activeBuffs[id]; renderSkillBar(); } }
+  // Skill cooldowns
+  updateSkillBarCooldowns(dt);
   cam.x=player.x-c.width/2;cam.y=player.y-c.height/2;
 
   particles=particles.filter(p=>{p.x+=p.vx*dt;p.y+=p.vy*dt;p.vy+=80*dt;p.life-=dt;return p.life>0;});
@@ -1685,16 +1729,23 @@ function drawMinimap(){
 
 function drawHUD(){
   const bw=175;
-  ctx.fillStyle='rgba(8,8,18,0.82)';ctx.fillRect(10,10,bw+10,75);
-  ctx.strokeStyle='#2a3050';ctx.lineWidth=1;ctx.strokeRect(10,10,bw+10,75);
+  ctx.fillStyle='rgba(8,8,18,0.82)';ctx.fillRect(10,10,bw+10,82);
+  ctx.strokeStyle='#2a3050';ctx.lineWidth=1;ctx.strokeRect(10,10,bw+10,82);
   ctx.fillStyle='#556';ctx.font='9px monospace';ctx.textAlign='left';ctx.fillText('HERO',15,23);
   ctx.fillStyle='#1a1a2e';ctx.fillRect(15,27,bw,18);
   const hr=Math.max(0,player.hp/playerMaxHp);
   ctx.fillStyle=hr>0.6?'#2ecc40':hr>0.3?'#f39c12':'#e74c3c';ctx.fillRect(15,27,Math.floor(bw*hr),18);
   ctx.fillStyle='#fff';ctx.font='bold 11px monospace';ctx.textAlign='center';ctx.fillText(`${Math.ceil(player.hp)} / ${playerMaxHp}`,15+bw/2,40);
-  ctx.fillStyle=player.atkCd>0?'#888':'#f1c40f';ctx.font='9px monospace';ctx.textAlign='left';ctx.fillText(player.atkCd>0?`ATK ${player.atkCd.toFixed(1)}s`:'ATK RDY',15,58);
-  ctx.fillStyle=rollCd>0?'#888':'#88aaff';ctx.fillText(rollCd>0?`ROLL ${rollCd.toFixed(1)}s`:'ROLL RDY',90,58);
-  ctx.fillStyle='#3a8a3a';ctx.fillText(`♥ +${P_REGEN}/s`,15,70);
+  // MP bar
+  ctx.fillStyle='#0a0a1e';ctx.fillRect(15,47,bw,6);
+  const mratio=Math.max(0,playerMP/Math.max(1,playerMaxMp));
+  ctx.fillStyle='#2255cc';ctx.fillRect(15,47,Math.floor(bw*mratio),6);
+  ctx.fillStyle='#8899cc';ctx.font='8px monospace';ctx.textAlign='left';
+  ctx.fillText(`${Math.ceil(playerMP)}/${playerMaxMp} MP`,15,44);
+  ctx.fillStyle=player.atkCd>0?'#888':'#f1c40f';ctx.font='9px monospace';ctx.textAlign='left';ctx.fillText(player.atkCd>0?`ATK ${player.atkCd.toFixed(1)}s`:'ATK RDY',15,63);
+  ctx.fillStyle=rollCd>0?'#888':'#88aaff';ctx.fillText(rollCd>0?`ROLL ${rollCd.toFixed(1)}s`:'ROLL RDY',90,63);
+  ctx.fillStyle='#3a8a3a';ctx.fillText(`♥ +${P_REGEN}/s`,15,75);
+  drawBuffIcons();
 
   if(stunned){
     ctx.fillStyle='rgba(20,15,0,0.9)';ctx.fillRect(10,84,bw+10,24);
@@ -1793,7 +1844,7 @@ function draw(){
     drawCracks();
   }
 
-  drawParticles();drawRollTrail();drawImpacts();
+  drawParticles();drawRollTrail();drawImpacts();drawBuffRings();drawSkillAoes();
   // Draw lunge target circles (before characters so characters render on top)
   if (currentMap === 'slime_map') {
     for (const s of slimes) {
@@ -2103,6 +2154,14 @@ function learnSkill(skillId) {
   if (lv >= skill.maxLevel) return;
   availableSkillPoints--;
   playerSkills[skillId] = lv + 1;
+  // Auto-add to skill bar on first learn (active skills only)
+  if (lv === 0 && (skill.type === 'active_buff' || skill.type === 'active_dmg')) {
+    const freeSlot = skillBarSlots.indexOf(null);
+    if (freeSlot >= 0 && !skillBarSlots.includes(skillId)) {
+      skillBarSlots[freeSlot] = skillId;
+      renderSkillBar();
+    }
+  }
   renderSkillPanel();
   if (inventoryOpen) refreshStatsPanel();
 }
@@ -2366,6 +2425,273 @@ document.addEventListener('click', e => {
   const ctx = document.getElementById('item-ctx');
   if (ctx && ctx.style.display !== 'none' && !ctx.contains(e.target)) closeCtxMenu();
 });
+
+// ── ACTIVE SKILL SYSTEM ───────────────────────────────────────────────────
+const SKILL_COOLDOWNS = { haste:30, arrow_rain:8, battle_cry:30, shield_bash:6 };
+const CLASS_DEFAULT_SLOTS = {
+  warrior: ['battle_cry','shield_bash',null,null],
+  archer:  ['haste','arrow_rain',null,null],
+};
+const SKILL_ICONS = {
+  haste:'⚡', arrow_rain:'🌧️', battle_cry:'📣', shield_bash:'💥',
+};
+
+let playerMP       = 20;
+let playerMaxMp    = 20;
+let mpRegenAcc     = 0;
+let skillBarSlots  = [null,null,null,null];
+let skillCooldowns = {}; // {skillId: secondsRemaining}
+let activeBuffs    = {}; // {buffId: {level,expiresAt,moveBonus,regenMult,...}}
+let buffRings      = []; // expanding ring visuals
+let skillAoes      = []; // AOE circle visuals
+
+function computePlayerMaxMp() {
+  const base = getBaseStats(), p = pendingStats;
+  return 20 + ((base.intelligence||0)+(p.intelligence||0)) * 10;
+}
+
+function initSkillSystem() {
+  playerMaxMp  = computePlayerMaxMp();
+  playerMP     = playerMaxMp;
+  skillBarSlots = [...(CLASS_DEFAULT_SLOTS[rpg_char_class] || [null,null,null,null])];
+  buildSkillBar();
+  renderSkillBar();
+}
+
+// ── SKILL BAR UI ──────────────────────────────────────────────────────────
+function buildSkillBar() {
+  const bar = document.getElementById('skill-bar');
+  if (!bar) return;
+  bar.innerHTML = '';
+  for (let i = 0; i < 4; i++) {
+    const slot = document.createElement('div');
+    slot.className = 'sk-bar-slot';
+    slot.id = `sk-bar-${i}`;
+    slot.addEventListener('click', () => useSkillSlot(i));
+    slot.innerHTML = `
+      <div class="sk-bar-icon" id="sk-bar-icon-${i}">·</div>
+      <div class="sk-bar-key">${i+1}</div>
+      <canvas class="sk-bar-cd" id="sk-bar-cd-${i}" width="48" height="48"></canvas>`;
+    bar.appendChild(slot);
+  }
+}
+
+function renderSkillBar() {
+  for (let i = 0; i < 4; i++) {
+    const skillId  = skillBarSlots[i];
+    const iconEl   = document.getElementById(`sk-bar-icon-${i}`);
+    const slotEl   = document.getElementById(`sk-bar-${i}`);
+    if (!iconEl || !slotEl) continue;
+    if (skillId && playerSkills[skillId]) {
+      iconEl.textContent = SKILL_ICONS[skillId] || '?';
+      slotEl.classList.add('has-skill');
+      slotEl.classList.toggle('buff-active', !!activeBuffs[skillId]);
+    } else {
+      iconEl.textContent = '·';
+      slotEl.classList.remove('has-skill','buff-active');
+    }
+  }
+}
+
+function updateSkillBarCooldowns(dt) {
+  for (const sk of Object.keys(skillCooldowns)) {
+    if (skillCooldowns[sk] > 0) skillCooldowns[sk] = Math.max(0, skillCooldowns[sk]-dt);
+  }
+  for (let i = 0; i < 4; i++) {
+    const skillId = skillBarSlots[i];
+    const cv = document.getElementById(`sk-bar-cd-${i}`);
+    if (!cv) continue;
+    const cc = cv.getContext('2d');
+    cc.clearRect(0, 0, 48, 48);
+    if (!skillId) { cc.fillStyle='rgba(0,0,0,0.55)'; cc.fillRect(0,0,48,48); continue; }
+    const level = playerSkills[skillId] || 0;
+    if (!level) { cc.fillStyle='rgba(0,0,0,0.6)'; cc.fillRect(0,0,48,48); continue; }
+    const cd = skillCooldowns[skillId] || 0;
+    const maxCd = SKILL_COOLDOWNS[skillId] || 10;
+    if (cd > 0) {
+      const frac = cd / maxCd;
+      cc.fillStyle = 'rgba(0,0,0,0.62)';
+      cc.beginPath(); cc.moveTo(24,24);
+      cc.arc(24,24,24,-Math.PI/2,-Math.PI/2+frac*Math.PI*2); cc.closePath(); cc.fill();
+      cc.fillStyle='#fff'; cc.font='bold 13px monospace'; cc.textAlign='center'; cc.textBaseline='middle';
+      cc.fillText(Math.ceil(cd),24,24);
+    }
+  }
+}
+
+// ── SKILL ACTIVATION ─────────────────────────────────────────────────────
+function useSkillSlot(idx) {
+  if (inventoryOpen || skillPanelOpen || player.dead) return;
+  const skillId = skillBarSlots[idx];
+  if (!skillId) return;
+  const skills = CLASS_SKILLS[rpg_char_class] || [];
+  const skill  = skills.find(s => s.id === skillId);
+  if (!skill) return;
+  const level = playerSkills[skillId] || 0;
+  if (!level) return;
+  if ((skillCooldowns[skillId]||0) > 0) { addFloat(player.x,player.y-50,'ON COOLDOWN','#888',12); return; }
+  const mpCost = skill.id === 'shield_bash' ? 8+level*3 : 10+level*5;
+  if (playerMP < mpCost) { addFloat(player.x,player.y-50,'NOT ENOUGH MP','#4488ff',13); return; }
+  if (skill.type==='active_dmg' && currentMap!=='slime_map') return;
+
+  playerMP -= mpCost;
+  skillCooldowns[skillId] = SKILL_COOLDOWNS[skillId] || 10;
+
+  if (skillId === 'haste')       activateHaste(level);
+  if (skillId === 'arrow_rain')  activateArrowRain(level);
+  if (skillId === 'battle_cry')  activateBattleCry(level);
+  if (skillId === 'shield_bash') activateShieldBash(level);
+
+  renderSkillBar();
+}
+
+function activateHaste(level) {
+  const duration = level * 60 * 1000;
+  const bonus    = level * 5;
+  activeBuffs.haste = { level, expiresAt: Date.now()+duration, moveBonus: bonus, aspdBonus: bonus };
+  addFloat(player.x, player.y-36, '⚡ HASTE!', '#00eeff', 20);
+  spawnBuffRing(player.x, player.y, '#00eeff', 250, 0.7);
+  burst(player.x, player.y, '#00eeff', 18);
+  if (ws&&ws.readyState===1) ws.send(JSON.stringify({type:'use_skill',skillId:'haste',skillLevel:level,duration:duration/1000}));
+  renderSkillBar();
+}
+
+function activateArrowRain(level) {
+  let tx = player.x, ty = player.y + 80;
+  if (targetSlime?.alive) {
+    const dx=targetSlime.x-player.x, dy=targetSlime.y-player.y, d=Math.hypot(dx,dy);
+    tx = d<=155 ? targetSlime.x : player.x+(dx/d)*150;
+    ty = d<=155 ? targetSlime.y : player.y+(dy/d)*150;
+  }
+  const aoeRadius = 100;
+  spawnSkillAoe(tx, ty, aoeRadius, '#4488ff', 2.2);
+  addFloat(tx, ty-30, '🌧 ARROW RAIN', '#4488ff', 16);
+  if (ws&&ws.readyState===1) ws.send(JSON.stringify({type:'use_skill',skillId:'arrow_rain',skillLevel:level,targetX:tx,targetY:ty,aoeRadius}));
+}
+
+function activateBattleCry(level) {
+  const duration = level * 60 * 1000;
+  activeBuffs.battle_cry = { level, expiresAt: Date.now()+duration, regenMult: 1+level };
+  addFloat(player.x, player.y-36, '📣 BATTLE CRY!', '#ff8800', 20);
+  spawnBuffRing(player.x, player.y, '#ff8800', 250, 0.7);
+  burst(player.x, player.y, '#ff8800', 22);
+  // Extra warm burst particles
+  for (let i=0;i<12;i++) {
+    const a=Math.random()*Math.PI*2, spd=40+Math.random()*60;
+    particles.push({x:player.x,y:player.y,vx:Math.cos(a)*spd,vy:Math.sin(a)*spd,color:'#ff9900',sz:3+Math.random()*3,life:0.6+Math.random()*0.4,max:1.0});
+  }
+  if (ws&&ws.readyState===1) ws.send(JSON.stringify({type:'use_skill',skillId:'battle_cry',skillLevel:level,duration:duration/1000}));
+  renderSkillBar();
+}
+
+function activateShieldBash(level) {
+  if (!targetSlime?.alive) { addFloat(player.x,player.y-40,'NO TARGET','#888',12); skillCooldowns.shield_bash=0; playerMP+=11+level*3; return; }
+  if (equipped.weapon?.subtype !== 'sword') { addFloat(player.x,player.y-40,'SWORD REQUIRED','#888',12); skillCooldowns.shield_bash=0; playerMP+=11+level*3; return; }
+  addFloat(player.x, player.y-30, '💥 BASH!', '#ffffff', 20);
+  // Impact star at target
+  for (let i=0;i<12;i++) {
+    const a=(i/12)*Math.PI*2;
+    particles.push({x:targetSlime.x,y:targetSlime.y,vx:Math.cos(a)*90,vy:Math.sin(a)*90,color:i%2?'#ffffff':'#ffcc44',sz:3,life:0.25,max:0.25});
+  }
+  spawnImpact(targetSlime.x, targetSlime.y-10, '#ffffff');
+  if (ws&&ws.readyState===1) ws.send(JSON.stringify({type:'use_skill',skillId:'shield_bash',skillLevel:level,targetSlimeId:targetSlime.id}));
+}
+
+// ── BUFF SYSTEM ───────────────────────────────────────────────────────────
+function applyServerBuff(msg) {
+  // Another player cast a buff — apply it locally if not already a higher level
+  const existing = activeBuffs[msg.skillId];
+  if (existing && existing.level >= msg.skillLevel) return; // higher level already active
+  if (msg.skillId === 'haste')       activeBuffs.haste       = { level:msg.skillLevel, expiresAt:Date.now()+msg.duration*1000, moveBonus:msg.skillLevel*5, aspdBonus:msg.skillLevel*5 };
+  if (msg.skillId === 'battle_cry')  activeBuffs.battle_cry  = { level:msg.skillLevel, expiresAt:Date.now()+msg.duration*1000, regenMult:1+msg.skillLevel };
+  // Brief flash to show you received the buff
+  burst(player.x, player.y, msg.skillId==='haste'?'#00eeff':'#ff8800', 8);
+  renderSkillBar();
+}
+
+function getEffectiveMoveSpeed() {
+  return P_SPEED * (1 + (activeBuffs.haste?.moveBonus||0) / 100);
+}
+
+function getEffectiveHpRegenMult() {
+  return activeBuffs.battle_cry?.regenMult || 1;
+}
+
+// ── SKILL VISUALS ─────────────────────────────────────────────────────────
+function spawnBuffRing(x, y, color, maxR, duration) {
+  buffRings.push({x, y, color, maxR, radius:0, life:duration, max:duration});
+}
+
+function drawBuffRings() {
+  buffRings = buffRings.filter(r => { r.life -= 0.016; return r.life > 0; });
+  for (const r of buffRings) {
+    const [sx,sy] = scr(r.x, r.y);
+    const t = 1 - r.life/r.max;
+    r.radius = r.maxR * t;
+    const alpha = (1-t) * 0.7;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.strokeStyle = r.color; ctx.lineWidth = 3*(1-t);
+    ctx.beginPath(); ctx.arc(sx,sy,r.radius,0,Math.PI*2); ctx.stroke();
+    // Second inner ring
+    if (r.radius > 20) {
+      ctx.globalAlpha = alpha * 0.4;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(sx,sy,r.radius*0.6,0,Math.PI*2); ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+function spawnSkillAoe(x, y, radius, color, duration) {
+  skillAoes.push({x, y, radius, color, life:duration, max:duration});
+}
+
+function drawSkillAoes() {
+  skillAoes = skillAoes.filter(a => { a.life -= 0.016; return a.life > 0; });
+  for (const a of skillAoes) {
+    const [sx,sy] = scr(a.x, a.y);
+    const t = a.life / a.max;
+    ctx.save();
+    // Pulse effect
+    const pulse = Math.sin(Date.now()*0.012)*0.06;
+    ctx.globalAlpha = 0.1 + pulse;
+    ctx.fillStyle = a.color;
+    ctx.beginPath(); ctx.arc(sx,sy,a.radius,0,Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 0.5 + pulse*2;
+    ctx.strokeStyle = a.color; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(sx,sy,a.radius,0,Math.PI*2); ctx.stroke();
+    // Rain arrows visual: random arrow positions falling
+    if (a.color === '#4488ff') {
+      ctx.globalAlpha = 0.35;
+      ctx.strokeStyle = '#88bbff'; ctx.lineWidth = 1.5;
+      const seed = Math.floor(Date.now()/100);
+      for (let i=0;i<6;i++) {
+        const ax = sx + Math.sin(seed*7+i*37)*a.radius*0.75;
+        const ay = sy + Math.cos(seed*13+i*23)*a.radius*0.75;
+        ctx.beginPath(); ctx.moveTo(ax,ay-8); ctx.lineTo(ax,ay+8); ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+}
+
+function drawBuffIcons() {
+  // Small buff icons shown near the HP bar
+  let bx = 190, by = 15;
+  for (const [buffId, buff] of Object.entries(activeBuffs)) {
+    const now = Date.now();
+    if (now >= buff.expiresAt) { delete activeBuffs[buffId]; continue; }
+    const timeLeft = (buff.expiresAt - now) / 1000;
+    const color = buffId==='haste' ? '#00eeff' : '#ff8800';
+    const icon  = SKILL_ICONS[buffId] || '?';
+    ctx.fillStyle = color+'22'; ctx.fillRect(bx, by, 36, 18);
+    ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.strokeRect(bx, by, 36, 18);
+    ctx.fillStyle = color; ctx.font = '9px monospace'; ctx.textAlign = 'left';
+    ctx.fillText(`${icon}${Math.ceil(timeLeft)}s`, bx+2, by+13);
+    bx += 40;
+  }
+}
 
 // ── SPRITE RENDERER ────────────────────────────────────────────────────────
 // Used by inventory to draw the character preview

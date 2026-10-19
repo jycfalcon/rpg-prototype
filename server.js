@@ -556,6 +556,72 @@ wss.on('connection', ws => {
 
       // ── RESPAWN ────────────────────────────────────────────────────────
       // Always respawns to town at healer position
+      // ── ACTIVE SKILLS ──────────────────────────────────────────────────
+      if (msg.type === 'use_skill') {
+        const sp = players.get(id);
+        if (!sp?.state) return;
+
+        if (msg.skillId === 'arrow_rain') {
+          if (sp.currentMap !== 'slime_map') return;
+          const { targetX, targetY, skillLevel, aoeRadius = 100 } = msg;
+          const dist = Math.hypot(sp.state.x - targetX, sp.state.y - targetY);
+          if (dist > 165) return; // 150px cast range + tolerance
+          broadcastToMap({ type: 'skill_aoe', skillId: 'arrow_rain', x: targetX, y: targetY, radius: aoeRadius }, 'slime_map');
+          const numHits = 4 + (skillLevel || 1);
+          const atkVal  = sp.state.currentAtk || 5;
+          for (let i = 0; i < numHits; i++) {
+            setTimeout(() => {
+              for (const s of slimes) {
+                if (!s.alive) continue;
+                if (Math.hypot(s.x - targetX, s.y - targetY) > aoeRadius + s.r) continue;
+                const dmg = physDmg(Math.floor(atkVal * 0.5), s.def);
+                s.hp -= dmg; s.flash = 0.1;
+                broadcastToMap({ type: 'slime_hit', slimeId: s.id, x: s.x, y: s.y, hp: s.hp, maxHp: s.maxHp, dmg }, 'slime_map');
+                if (s.hp <= 0) {
+                  s.alive = false;
+                  broadcastToMap({ type: 'slime_killed', slimeId: s.id, isKing: s.isKing, isGiant: s.isGiant, x: s.x, y: s.y }, 'slime_map');
+                  const xp = s.isKing ? MOB_XP.king : s.isGiant ? MOB_XP.giant : MOB_XP.normal;
+                  for (const [pid] of players) awardXP(pid, xp);
+                }
+              }
+              broadcastToMap({ type: 'skill_hit', skillId: 'arrow_rain', x: targetX, y: targetY }, 'slime_map');
+            }, i * 450);
+          }
+        }
+
+        if (msg.skillId === 'shield_bash') {
+          if (sp.currentMap !== 'slime_map') return;
+          const s = slimes.find(sl => sl.alive && sl.id === msg.targetSlimeId);
+          if (!s) return;
+          const dist = Math.hypot(sp.state.x - s.x, sp.state.y - s.y);
+          if (dist > ATK_RANGE * 1.5 + s.r + 30) return;
+          const lv = msg.skillLevel || 1;
+          const dmgMult = 1.5 + lv * 0.3;
+          const stunDur = 1.5 + lv * 0.5;
+          const dmg = physDmg(Math.floor((sp.state.currentAtk || 5) * dmgMult), s.def);
+          s.hp -= dmg; s.flash = 0.3;
+          s.atkPhase = 'recovery'; s.atkPhaseTimer = stunDur;
+          broadcastToMap({ type: 'slime_hit',  slimeId: s.id, x: s.x, y: s.y, hp: s.hp, maxHp: s.maxHp, dmg }, 'slime_map');
+          broadcastToMap({ type: 'skill_hit',  skillId: 'shield_bash', x: s.x, y: s.y }, 'slime_map');
+          if (s.hp <= 0) {
+            s.alive = false;
+            broadcastToMap({ type: 'slime_killed', slimeId: s.id, isKing: s.isKing, isGiant: s.isGiant, x: s.x, y: s.y }, 'slime_map');
+            const xp = s.isKing ? MOB_XP.king : s.isGiant ? MOB_XP.giant : MOB_XP.normal;
+            for (const [pid] of players) awardXP(pid, xp);
+          }
+        }
+
+        // Buff skills — broadcast to party within 250px
+        if (msg.skillId === 'haste' || msg.skillId === 'battle_cry') {
+          for (const [pid, other] of players) {
+            if (!other.state || other.currentMap !== sp.currentMap) continue;
+            if (Math.hypot(sp.state.x - other.state.x, sp.state.y - other.state.y) <= 250) {
+              send(other.ws, { type: 'skill_buff', skillId: msg.skillId, skillLevel: msg.skillLevel, casterId: id, duration: msg.duration });
+            }
+          }
+        }
+      }
+
       if (msg.type === 'respawn') {
         p.currentMap    = 'town';
         p.state.x       = TOWN_SPAWN_X;
