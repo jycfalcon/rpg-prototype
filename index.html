@@ -7,6 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>RPG Prototype</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { background: #0a0a14; overflow: hidden; touch-action: none; }
@@ -412,6 +413,12 @@
   </div><!-- /inv-wrap -->
 </div><!-- /inventory-panel -->
 
+<!-- ITEM CONTEXT MENU -->
+<div id="item-ctx" style="display:none;position:fixed;z-index:900;background:#0e0e28;border:1px solid #4040a0;font-family:'Courier New',monospace;min-width:140px;">
+  <div id="ctx-fav"     style="padding:9px 14px;cursor:pointer;font-size:10px;color:#c8c8f0;border-bottom:1px solid #2a2a50;" onmouseenter="this.style.background='#1a1a40'" onmouseleave="this.style.background=''">★ Favourite</div>
+  <div id="ctx-discard" style="padding:9px 14px;cursor:pointer;font-size:10px;color:#e06060;" onmouseenter="this.style.background='#2a1010'" onmouseleave="this.style.background=''">Discard</div>
+</div>
+
 <!-- STAT TOOLTIP -->
 <div id="stat-tooltip">
   <div class="stt-name" id="stt-name"></div>
@@ -470,6 +477,18 @@ const TOWN_NPCS = {
 const CLASS_MAX_HP = { warrior: 32, archer: 22, mage: 26 };
 let playerMaxHp = CLASS_MAX_HP[rpg_char_class] || 32;
 
+// ── SUPABASE CLIENT ───────────────────────────────────────────────────────
+const { createClient } = supabase;
+const sbClient = createClient(
+  'https://qlehgpddqxkgdvfhwtdu.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFsZWhncGRkcXhrZ2R2Zmh3dGR1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIzMTgzODMsImV4cCI6MjEwNzg5NDM4M30.uNNdGVwReFk4pGmYETabbC9NfiWj08I8_-H5dcWm_gw'
+);
+
+// ── PLAYER PROGRESSION STATE ──────────────────────────────────────────────
+let playerLevel     = 1;
+let playerXP        = 0;
+let playerXPToNext  = 100;
+
 // Starting stats per class — used for inventory stat display until server sends real data
 const CLASS_STARTING_STATS = {
   warrior: { strength:8, vitality:6, agility:3, dexterity:2, intelligence:0, luck:1 },
@@ -479,7 +498,7 @@ const CLASS_STARTING_STATS = {
 
 // ── GAME CONSTANTS ────────────────────────────────────────────────────────
 const P_SPEED=130, P_ATK=3, P_REGEN=1;
-const ATK_RANGE=80, ATK_DURATION=0.3, ATK_CD=0.55;
+const ATK_RANGE=50, ATK_DURATION=0.3, ATK_CD=0.55;
 const SWORD_IDLE=Math.PI*0.15;
 const ROLL_SPEED=340, ROLL_DURATION=0.36, ROLL_CD=1.6;
 const STUN_DURATION=5.0;
@@ -501,12 +520,16 @@ function connectWS() {
 
   ws.onopen = () => {
     wsStatus = 'online';
-    // Send character data on connect — server sets player name/class/hp
+    // Send character data on connect — server sets player name/class/hp/appearance
     ws.send(JSON.stringify({
-      type:      'auth',
-      charName:  rpg_char_name,
-      charClass: rpg_char_class,
-      maxHp:     playerMaxHp,
+      type:         'auth',
+      charName:     rpg_char_name,
+      charClass:    rpg_char_class,
+      maxHp:        playerMaxHp,
+      skinTone:     parseInt(localStorage.getItem('rpg_skin_tone')  || '0'),
+      hairStyle:    parseInt(localStorage.getItem('rpg_hair_style') || '0'),
+      hairColor:    parseInt(localStorage.getItem('rpg_hair_color') || '0'),
+      weaponSubtype: null, // will update after inventory loads
     }));
   };
 
@@ -533,8 +556,26 @@ function connectWS() {
       }
 
       if (msg.type === 'auth_ok') {
-        playerMaxHp = msg.maxHp;
-        player.hp   = playerMaxHp;
+        playerMaxHp    = msg.maxHp;
+        player.hp      = playerMaxHp;
+        playerLevel    = msg.level    || 1;
+        playerXP       = msg.xp       || 0;
+        playerXPToNext = msg.xpToNext || 100;
+        availablePoints = msg.statPoints || 0;
+        loadInventory();
+      }
+
+      if (msg.type === 'xp_update') {
+        playerXP       = msg.xp;
+        playerXPToNext = msg.xpToNext;
+        availablePoints = msg.statPoints;
+        const prevLevel = playerLevel;
+        playerLevel    = msg.level;
+        if (msg.leveledUp) {
+          addFloat(player.x, player.y - 60, `LEVEL UP! ${playerLevel}`, '#f1c40f', 20);
+          burst(player.x, player.y, '#f1c40f', 20);
+          if (inventoryOpen) refreshStatsPanel();
+        }
       }
 
       if (msg.type === 'healed') {
@@ -732,11 +773,7 @@ window.addEventListener('keydown', e => {
       if (nearbyNpc) triggerInteract(nearbyNpc);
       else if (returnPortalNearby) openWorldMap();
     }
-    // B = toggle inventory bag
-    if (k === 'b') {
-      inventoryOpen ? closeInventory() : openInventory();
-    }
-    // Escape = close any open panel
+    // Escape = close any open panel (also handled in capture, but harmless here)
     if (k === 'escape') {
       if (inventoryOpen) closeInventory();
       else closeWorldMap();
@@ -898,6 +935,11 @@ function update(dt) {
       hp:player.hp, maxHp:playerMaxHp, rolling,
       atkTimer:player.atkTimer, atkAngle:player.atkAngle,
       dead:player.dead, stunned, currentMap,
+      skinTone:  parseInt(localStorage.getItem('rpg_skin_tone')  || '0'),
+      hairStyle: parseInt(localStorage.getItem('rpg_hair_style') || '0'),
+      hairColor: parseInt(localStorage.getItem('rpg_hair_color') || '0'),
+      charClass: rpg_char_class,
+      weaponSubtype: equipped.weapon?.subtype || null,
     }));
   }
   for(const p of Object.values(others)){
@@ -1169,14 +1211,24 @@ function drawOtherChar(op){
   ctx.save();ctx.translate(sx,sy);
   const sAngle=atk?op.atkAngle:SWORD_IDLE;
   let swingOff=0;if(atk){const prog=1-op.atkTimer/ATK_DURATION;swingOff=prog<0.35?-0.45*(prog/0.35):-0.45+0.62*((prog-0.35)/0.65);}
+  // Use broadcasted appearance
+  const _osk = SKIN_PAL[op.skinTone  || 0] || SKIN_PAL[0];
+  const _ohr = HAIR_PAL[op.hairColor || 0] || HAIR_PAL[0];
+  const _ohi = op.hairStyle || 0;
+  const _osh = CLASS_SHIRT[op.charClass] || '#1e4d6b';
+  ctx.fillStyle=_ohr;
+  if(_ohi===0){ctx.fillRect(-3*p,-8*p,6*p,2*p);}
+  else if(_ohi===1){ctx.fillRect(-3*p,-8*p,6*p,2*p);ctx.fillRect(-4*p,-7*p,p,8*p);ctx.fillRect(3*p,-7*p,p,8*p);}
+  else if(_ohi===2){for(let _i=-2;_i<=2;_i++)ctx.fillRect(_i*p,-9*p,p,3*p);}
+  else{ctx.fillRect(-2*p,-9*p,4*p,4*p);}
   ctx.fillStyle='#2a1a0e';ctx.fillRect(-5*p,6*p,4*p,p);ctx.fillRect(p,6*p,4*p,p);
   ctx.fillStyle='#4a3020';ctx.fillRect(-4*p,3*p,3*p,3*p);ctx.fillRect(p,3*p,3*p,3*p);
   ctx.fillStyle='#5c3a1a';ctx.fillRect(-4*p,2*p,8*p,p);
-  ctx.fillStyle='#1e4d6b';ctx.fillRect(-4*p,-p,8*p,3*p);
-  ctx.fillStyle='#c09060';ctx.fillRect(-6*p,-p,2*p,3*p);ctx.fillRect(4*p,-p,2*p,3*p);
-  ctx.fillStyle='#c09060';ctx.fillRect(-p,-2*p,2*p,p);
-  ctx.fillStyle='#c09060';ctx.fillRect(-3*p,-7*p,6*p,5*p);
-  ctx.fillStyle='#1a0a4a';ctx.fillRect(-3*p,-7*p,6*p,2*p);ctx.fillRect(-4*p,-6*p,p,3*p);ctx.fillRect(3*p,-6*p,p,3*p);
+  ctx.fillStyle=_osh;ctx.fillRect(-4*p,-p,8*p,3*p);
+  ctx.fillStyle=_osk;ctx.fillRect(-6*p,-p,2*p,3*p);ctx.fillRect(4*p,-p,2*p,3*p);
+  ctx.fillStyle=_osk;ctx.fillRect(-p,-2*p,2*p,p);
+  ctx.fillStyle=_osk;ctx.fillRect(-3*p,-7*p,6*p,5*p);
+  ctx.fillStyle=_ohr;ctx.fillRect(-3*p,-7*p,6*p,p);ctx.fillRect(-4*p,-6*p,p,3*p);ctx.fillRect(3*p,-6*p,p,3*p);
   if(op.facing!=='up'){ctx.fillStyle='#1a1a2e';ctx.fillRect(-2*p,-5*p,p,p);ctx.fillRect(p,-5*p,p,p);}
   if(!op.rolling){
     ctx.save();ctx.rotate(sAngle+swingOff);
@@ -1203,14 +1255,26 @@ function drawChar(){
   ctx.save();ctx.translate(sx,sy);
   const sAngle=atk?player.atkAngle:SWORD_IDLE;
   let swingOff=0;if(atk){const prog=1-player.atkTimer/ATK_DURATION;swingOff=prog<0.35?-0.45*(prog/0.35):-0.45+0.62*((prog-0.35)/0.65);}
+  // Use actual appearance
+  const _sk = SKIN_PAL[parseInt(localStorage.getItem('rpg_skin_tone') || '0')] || SKIN_PAL[0];
+  const _hr = HAIR_PAL[parseInt(localStorage.getItem('rpg_hair_color') || '0')] || HAIR_PAL[0];
+  const _hi = parseInt(localStorage.getItem('rpg_hair_style') || '0');
+  const _sh = CLASS_SHIRT[rpg_char_class] || '#2d5c2d';
+  // Hair (drawn behind head)
+  ctx.fillStyle=_hr;
+  if(_hi===0){ctx.fillRect(-3*p,-8*p,6*p,2*p);}
+  else if(_hi===1){ctx.fillRect(-3*p,-8*p,6*p,2*p);ctx.fillRect(-4*p,-7*p,p,8*p);ctx.fillRect(3*p,-7*p,p,8*p);}
+  else if(_hi===2){for(let _i=-2;_i<=2;_i++)ctx.fillRect(_i*p,-9*p,p,3*p);}
+  else{ctx.fillRect(-2*p,-9*p,4*p,4*p);}
+  // Body
   ctx.fillStyle='#2a1a0e';ctx.fillRect(-5*p,6*p,4*p,p);ctx.fillRect(p,6*p,4*p,p);
   ctx.fillStyle='#4a3020';ctx.fillRect(-4*p,3*p,3*p,3*p);ctx.fillRect(p,3*p,3*p,3*p);
   ctx.fillStyle='#5c3a1a';ctx.fillRect(-4*p,2*p,8*p,p);
-  ctx.fillStyle='#2d5c2d';ctx.fillRect(-4*p,-p,8*p,3*p);
-  ctx.fillStyle='#c09060';ctx.fillRect(-6*p,-p,2*p,3*p);ctx.fillRect(4*p,-p,2*p,3*p);
-  ctx.fillStyle='#c09060';ctx.fillRect(-p,-2*p,2*p,p);
-  ctx.fillStyle='#c09060';ctx.fillRect(-3*p,-7*p,6*p,5*p);
-  ctx.fillStyle='#2e1a0a';ctx.fillRect(-3*p,-7*p,6*p,2*p);ctx.fillRect(-4*p,-6*p,p,3*p);ctx.fillRect(3*p,-6*p,p,3*p);
+  ctx.fillStyle=_sh;ctx.fillRect(-4*p,-p,8*p,3*p);
+  ctx.fillStyle=_sk;ctx.fillRect(-6*p,-p,2*p,3*p);ctx.fillRect(4*p,-p,2*p,3*p);
+  ctx.fillStyle=_sk;ctx.fillRect(-p,-2*p,2*p,p);
+  ctx.fillStyle=_sk;ctx.fillRect(-3*p,-7*p,6*p,5*p);
+  ctx.fillStyle=_hr;ctx.fillRect(-3*p,-7*p,6*p,p);ctx.fillRect(-4*p,-6*p,p,3*p);ctx.fillRect(3*p,-6*p,p,3*p);
   if(player.facing!=='up'){ctx.fillStyle='#1a1a2e';ctx.fillRect(-2*p,-5*p,p,p);ctx.fillRect(p,-5*p,p,p);}
   if(!rolling){
     ctx.save();ctx.rotate(sAngle+swingOff);
@@ -1304,9 +1368,15 @@ function drawHUD(){
   const hr=Math.max(0,player.hp/playerMaxHp);
   ctx.fillStyle=hr>0.6?'#2ecc40':hr>0.3?'#f39c12':'#e74c3c';ctx.fillRect(15,27,Math.floor(bw*hr),18);
   ctx.fillStyle='#fff';ctx.font='bold 11px monospace';ctx.textAlign='center';ctx.fillText(`${Math.ceil(player.hp)} / ${playerMaxHp}`,15+bw/2,40);
-  ctx.fillStyle=player.atkCd>0?'#888':'#f1c40f';ctx.font='9px monospace';ctx.textAlign='left';ctx.fillText(player.atkCd>0?`ATK ${player.atkCd.toFixed(1)}s`:'ATK RDY',15,58);
-  ctx.fillStyle=rollCd>0?'#888':'#88aaff';ctx.fillText(rollCd>0?`ROLL ${rollCd.toFixed(1)}s`:'ROLL RDY',90,58);
-  ctx.fillStyle='#3a8a3a';ctx.fillText(`♥ +${P_REGEN}/s`,15,70);
+  // XP bar
+  ctx.fillStyle='#1a1a2e';ctx.fillRect(15,45,bw,6);
+  const xratio=Math.min(1,playerXP/playerXPToNext);
+  ctx.fillStyle='#c8a800';ctx.fillRect(15,45,Math.floor(bw*xratio),6);
+  ctx.fillStyle='#666';ctx.font='8px monospace';ctx.textAlign='left';
+  ctx.fillText(`Lv ${playerLevel}  XP ${playerXP}/${playerXPToNext}`,15,43);
+  ctx.fillStyle=player.atkCd>0?'#888':'#f1c40f';ctx.font='9px monospace';ctx.textAlign='left';ctx.fillText(player.atkCd>0?`ATK ${player.atkCd.toFixed(1)}s`:'ATK RDY',15,62);
+  ctx.fillStyle=rollCd>0?'#888':'#88aaff';ctx.fillText(rollCd>0?`ROLL ${rollCd.toFixed(1)}s`:'ROLL RDY',90,62);
+  ctx.fillStyle='#3a8a3a';ctx.fillText(`♥ +${P_REGEN}/s`,15,74);
 
   if(stunned){
     ctx.fillStyle='rgba(20,15,0,0.9)';ctx.fillRect(10,84,bw+10,24);
@@ -1571,6 +1641,93 @@ function closeStoragePanel(){
   document.getElementById('storage-panel').style.display = 'none';
 }
 
+// ── INVENTORY LOADING ─────────────────────────────────────────────────────
+async function loadInventory() {
+  const charId = localStorage.getItem('rpg_char_id');
+  const token  = localStorage.getItem('rpg_token');
+  if (!charId || !token) return;
+  try {
+    // Set auth token so RLS knows who we are
+    const { data: { session } } = await sbClient.auth.getSession();
+    if (!session) {
+      await sbClient.auth.setSession({ access_token: token, refresh_token: token });
+    }
+    const { data: items, error } = await sbClient
+      .from('items')
+      .select('*')
+      .eq('owner_id', charId);
+    if (error) { console.warn('loadInventory error:', error.message); return; }
+    if (!items) return;
+    // Separate equipped items from inventory
+    inventory = [];
+    for (const item of items) {
+      if (item.equipped && item.slot && equipped[item.slot] === null) {
+        equipped[item.slot === 'accessory' ? (equipped.accessory1 ? 'accessory2' : 'accessory1') : item.slot] = item;
+      } else {
+        inventory.push(item);
+      }
+    }
+    // Update weapon subtype for state broadcast
+    // Refresh inventory UI if open
+    if (inventoryOpen) refreshInventoryUI();
+  } catch(e) { console.warn('loadInventory failed:', e); }
+}
+
+// ── ITEM CONTEXT MENU ─────────────────────────────────────────────────────
+let ctxItemIdx = -1;
+
+function openCtxMenu(e, idx) {
+  e.preventDefault();
+  ctxItemIdx = idx;
+  const item = inventory[idx];
+  if (!item) return;
+  const favEl = document.getElementById('ctx-fav');
+  const disEl = document.getElementById('ctx-discard');
+  if (favEl) favEl.textContent = item.favourited ? '★ Unfavourite' : '★ Favourite';
+  if (disEl) {
+    disEl.style.opacity = item.favourited ? '0.3' : '1';
+    disEl.style.cursor  = item.favourited ? 'default' : 'pointer';
+  }
+  const menu = document.getElementById('item-ctx');
+  if (!menu) return;
+  const x = Math.min(e.clientX, window.innerWidth  - 160);
+  const y = Math.min(e.clientY, window.innerHeight - 90);
+  menu.style.left    = x + 'px';
+  menu.style.top     = y + 'px';
+  menu.style.display = 'block';
+}
+
+function closeCtxMenu() {
+  const menu = document.getElementById('item-ctx');
+  if (menu) menu.style.display = 'none';
+  ctxItemIdx = -1;
+}
+
+async function ctxFavourite() {
+  if (ctxItemIdx < 0) return;
+  const item = inventory[ctxItemIdx];
+  if (!item) return;
+  item.favourited = !item.favourited;
+  // Persist to Supabase
+  await sbClient.from('items').update({ favourited: item.favourited }).eq('id', item.id);
+  closeCtxMenu();
+  renderInventoryGrid();
+}
+
+async function ctxDiscard() {
+  if (ctxItemIdx < 0) return;
+  const item = inventory[ctxItemIdx];
+  if (!item || item.favourited) return;
+  inventory.splice(ctxItemIdx, 1);
+  // Delete from Supabase
+  await sbClient.from('items').delete().eq('id', item.id);
+  closeCtxMenu();
+  renderInventoryGrid();
+}
+
+// Close context menu on outside click
+document.addEventListener('click', () => closeCtxMenu());
+
 // ── SPRITE RENDERER ────────────────────────────────────────────────────────
 // Used by inventory to draw the character preview
 const SKIN_PAL = ['#FFD0A0','#E8A870','#C88040','#8B5523'];
@@ -1736,12 +1893,16 @@ function renderInventoryGrid() {
     const slot = document.createElement('div');
     if (item) {
       slot.className = 'inv-item filled';
-      slot.textContent = itemIcon(item);
       slot.dataset.idx = i;
-      slot.addEventListener('dblclick', () => equipFromInventory(i));
-      slot.addEventListener('mouseenter', e => showTooltip(e, item));
-      slot.addEventListener('mouseleave', hideTooltip);
-      slot.addEventListener('mousemove',  moveTooltip);
+      // Icon + favourite star
+      const starHtml = item.favourited ? '<span style="position:absolute;top:2px;right:3px;font-size:9px;color:#f1c40f">★</span>' : '';
+      slot.style.position = 'relative';
+      slot.innerHTML = itemIcon(item) + starHtml;
+      slot.addEventListener('dblclick',     ()  => equipFromInventory(i));
+      slot.addEventListener('contextmenu',  (e) => openCtxMenu(e, i));
+      slot.addEventListener('mouseenter',   (e) => showTooltip(e, item));
+      slot.addEventListener('mouseleave',   hideTooltip);
+      slot.addEventListener('mousemove',    moveTooltip);
     } else {
       slot.className = 'inv-item';
     }

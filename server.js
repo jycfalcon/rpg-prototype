@@ -23,10 +23,10 @@ const RETURN_PORTAL_X = 1200, RETURN_PORTAL_Y = 200; // return portal in slime m
 const TOWN_HEALER_X = 600, TOWN_HEALER_Y = 300;
 
 // Game constants
-const P_ATK = 3, ATK_RANGE = 80;
-const S_HP=15, S_ATK=3,  S_SPEED=105, S_R=14;
-const G_HP=70, G_ATK=8,  G_SPEED=62,  G_R=26;
-const K_HP=200, K_SPEED=48, K_R=40;
+const P_ATK = 3, ATK_RANGE = 50;
+const S_HP=20,  S_ATK=5,  S_SPEED=105, S_R=14;
+const G_HP=350, G_ATK=18, G_SPEED=62,  G_R=26;
+const K_HP=3000, K_SPEED=48, K_R=40;
 const K_NORMAL_ATK=6, K_LUNGE_ATK=14, K_EQ_ATK=20;
 const K_NORMAL_ATK_RANGE=65, K_LUNGE_START_RANGE=200, K_EQ_TRIGGER_RANGE=220;
 const K_EQ_RADIUS=175, K_EQ_WINDUP=2.2;
@@ -41,6 +41,11 @@ const ROAM_SPEED=0.38, ROAM_INT_MIN=5, ROAM_INT_MAX=10, ROAM_RADIUS=130;
 const SPAWN_INTERVAL=20, MAX_SLIMES=20, SPAWN_BATCH_MIN=4;
 const STUN_DURATION=5.0;
 const NPC_INTERACT_RANGE=65;
+
+// XP awards per kill
+const MOB_XP = { normal: 10, giant: 50, king: 500 };
+// XP needed to reach next level: 100 + (level-1) * 50
+function xpToNext(level) { return 100 + (level - 1) * 50; }
 
 // ── STATE ─────────────────────────────────────────────────────────────────
 const players  = new Map();
@@ -98,6 +103,28 @@ function broadcastToMap(msg, mapId) {
 function sendToPlayer(pid, msg) {
   const p = players.get(pid);
   if (p && p.ws.readyState === WebSocket.OPEN) p.ws.send(JSON.stringify(msg));
+}
+
+// ── XP + LEVELLING ────────────────────────────────────────────────────────
+function awardXP(pid, amount) {
+  const p = players.get(pid);
+  if (!p || !p.state || p.currentMap !== 'slime_map') return;
+  p.state.xp += amount;
+  let leveledUp = false;
+  while (p.state.xp >= p.state.xpToNext) {
+    p.state.xp      -= p.state.xpToNext;
+    p.state.level   += 1;
+    p.state.xpToNext = xpToNext(p.state.level);
+    p.state.statPoints += 1;
+    leveledUp = true;
+  }
+  send(p.ws, {
+    type: 'xp_update',
+    xp: p.state.xp, level: p.state.level,
+    xpToNext: p.state.xpToNext,
+    statPoints: p.state.statPoints,
+    leveledUp,
+  });
 }
 
 // ── CHARACTER STATS ───────────────────────────────────────────────────────
@@ -373,7 +400,10 @@ wss.on('connection', ws => {
       hp: initMaxHp, maxHp: initMaxHp,
       dead: false, facing: 'down', rolling: false,
       atkTimer: 0, atkAngle: 0, stunned: false,
-      charName: `Player`, charClass: 'warrior',
+      charName: 'Player', charClass: 'warrior',
+      level: 1, xp: 0, xpToNext: 100, statPoints: 0,
+      skinTone: 0, hairStyle: 0, hairColor: 0,
+      weaponSubtype: null,
     },
   });
   console.log(`[+] Player ${id} — total: ${players.size}`);
@@ -401,17 +431,30 @@ wss.on('connection', ws => {
       // Client sends this on WS open — updates name, class, hp from character data
       if (msg.type === 'auth') {
         const maxHp = msg.maxHp || defaultMaxHp(msg.charClass);
-        p.state.charName  = msg.charName  || `Player`;
-        p.state.charClass = msg.charClass || 'warrior';
-        p.state.maxHp     = maxHp;
-        p.state.hp        = maxHp; // full HP on entry
-        send(ws, { type: 'auth_ok', maxHp, charName: p.state.charName });
+        p.state.charName     = msg.charName  || 'Player';
+        p.state.charClass    = msg.charClass || 'warrior';
+        p.state.maxHp        = maxHp;
+        p.state.hp           = maxHp;
+        p.state.skinTone     = msg.skinTone     || 0;
+        p.state.hairStyle    = msg.hairStyle    || 0;
+        p.state.hairColor    = msg.hairColor    || 0;
+        p.state.weaponSubtype = msg.weaponSubtype || null;
+        send(ws, {
+          type: 'auth_ok', maxHp, charName: p.state.charName,
+          level: p.state.level, xp: p.state.xp,
+          xpToNext: p.state.xpToNext, statPoints: p.state.statPoints,
+        });
         return;
       }
 
       // ── STATE ──────────────────────────────────────────────────────────
       if (msg.type === 'state') {
         const state = { ...p.state, ...msg, id, currentMap: p.currentMap };
+        // Keep server-side truth for level/xp
+        state.level      = p.state.level;
+        state.xp         = p.state.xp;
+        state.xpToNext   = p.state.xpToNext;
+        state.statPoints = p.state.statPoints;
         p.state = state;
         broadcast({ type: 'state', player: state }, id);
       }
@@ -432,6 +475,9 @@ wss.on('connection', ws => {
         if (s.hp <= 0) {
           s.alive = false;
           broadcastToMap({ type: 'slime_killed', slimeId: s.id, isKing: s.isKing, isGiant: s.isGiant, x: s.x, y: s.y }, 'slime_map');
+          // Award XP to all players on slime_map
+          const xpAmt = s.isKing ? MOB_XP.king : s.isGiant ? MOB_XP.giant : MOB_XP.normal;
+          for (const [pid] of players) awardXP(pid, xpAmt);
         }
       }
 

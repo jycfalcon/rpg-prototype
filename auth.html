@@ -346,9 +346,10 @@
           <div class="class-icon">🏹</div>
           <div class="class-name">ARCHER</div>
         </div>
-        <div class="class-card" id="card-mage" onclick="selectClass('mage')">
+        <div class="class-card" id="card-mage" style="opacity:0.35;cursor:not-allowed;position:relative;" title="Coming soon">
           <div class="class-icon">🔮</div>
           <div class="class-name">MAGE</div>
+          <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:8px;letter-spacing:0.15em;color:#6060a0;background:rgba(0,0,0,0.5);">LOCKED</div>
         </div>
       </div>
 
@@ -656,6 +657,7 @@ function goStep(n) {
 // CLASS SELECTION
 // ─────────────────────────────────────────────────────────────────
 function selectClass(cls) {
+  if (cls === 'mage') return; // locked
   selectedClass = cls;
   document.querySelectorAll('.class-card').forEach(c => c.classList.remove('selected'));
   document.getElementById(`card-${cls}`).classList.add('selected');
@@ -715,6 +717,28 @@ async function createCharacter() {
       ? 'That name is already taken. Choose another.'
       : error.message;
     return;
+  }
+
+  // Insert starter weapon for this class
+  const STARTER_WEAPONS = {
+    warrior: { slot:'weapon', subtype:'sword',  name:'Starter Sword',
+               stats:{ atk:10, strength:2 } },
+    archer:  { slot:'weapon', subtype:'bow',    name:'Starter Bow',
+               stats:{ atk:10, dexterity:2, range:15 } },
+    mage:    { slot:'weapon', subtype:'staff',  name:'Starter Staff',
+               stats:{ matk:10, intelligence:2 } },
+  };
+  const weapon = STARTER_WEAPONS[selectedClass];
+  if (weapon) {
+    await db.from('items').insert({
+      owner_id:   data.id,
+      slot:       weapon.slot,
+      subtype:    weapon.subtype,
+      name:       weapon.name,
+      stats:      weapon.stats,
+      equipped:   false,
+      favourited: false,
+    });
   }
 
   enterWorld(data, session);
