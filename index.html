@@ -1171,6 +1171,32 @@ function drawPortalNpc(sx, sy, nearby, t) {
   ctx.restore();
 }
 
+// ── LUNGE TARGET CIRCLE ───────────────────────────────────────────────────
+// Drawn on any player who is locked by a lunge — shrinks to zero over windup
+function drawLungeTarget(wx, wy, progress) {
+  const [sx, sy] = scr(wx, wy);
+  const maxR   = 58;
+  const r      = maxR * Math.max(0, 1 - progress);
+  if (r < 1) return;
+  ctx.save();
+  // Outer ring colour: yellow → orange → red as circle shrinks
+  const col = progress < 0.4 ? '#ffcc00' : progress < 0.7 ? '#ff7700' : '#ff2020';
+  ctx.globalAlpha = 0.7 + 0.3 * Math.sin(Date.now() * 0.015);
+  ctx.strokeStyle = col; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2); ctx.stroke();
+  // Inner fill — grows more opaque as ring closes
+  ctx.globalAlpha = 0.08 + 0.14 * progress;
+  ctx.fillStyle = '#ff2020';
+  ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2); ctx.fill();
+  // Second inner ring (tighter)
+  if (r > 18) {
+    ctx.globalAlpha = 0.4;
+    ctx.strokeStyle = col; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(sx, sy, r * 0.55, 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function drawReturnPortal() {
   const [sx, sy] = scr(RETURN_PORTAL_X, RETURN_PORTAL_Y);
   if(sx<-60||sx>c.width+60||sy<-60||sy>c.height+60)return;
@@ -1211,18 +1237,6 @@ function drawSlime(s){
     ctx.strokeStyle=prog>0.65?'#ff0000':'#ff6600';ctx.lineWidth=prog>0.65?4:2.5;
     ctx.beginPath();ctx.arc(0,0,s.earthquakeRadius,0,Math.PI*2);ctx.stroke();ctx.restore();
   }
-  if(phase==='lunge_windup'){
-    const windupDur2=s.isKing?WINDUP_GIANT:s.isGiant?WINDUP_GIANT:WINDUP_NORMAL;
-    const prog2=1-s.atkPhaseTimer/windupDur2,lAngle=s.lungeLockedAngle,pathLen=s.isKing?300:230,hw=s.r*1.15;
-    ctx.save();ctx.rotate(lAngle);
-    ctx.globalAlpha=0.06+prog2*0.1;ctx.fillStyle='#ff2200';ctx.fillRect(s.r,-hw,pathLen,hw*2);
-    ctx.globalAlpha=0.4+0.3*Math.sin(Date.now()*0.012);ctx.strokeStyle=prog2>0.65?'#ff2200':'#ff7700';
-    ctx.lineWidth=1.5;ctx.setLineDash([10,7]);
-    ctx.beginPath();ctx.moveTo(s.r,-hw);ctx.lineTo(s.r+pathLen,-hw);ctx.stroke();
-    ctx.beginPath();ctx.moveTo(s.r,hw);ctx.lineTo(s.r+pathLen,hw);ctx.stroke();ctx.setLineDash([]);
-    ctx.globalAlpha=0.5+0.3*prog2;ctx.fillStyle=prog2>0.65?'#ff2200':'#ff7700';
-    ctx.beginPath();ctx.moveTo(s.r+pathLen+12,0);ctx.lineTo(s.r+pathLen-8,-hw*0.7);ctx.lineTo(s.r+pathLen-8,hw*0.7);ctx.closePath();ctx.fill();
-    ctx.restore();
   }
   if(isTarget){
     const pulse=0.55+0.45*Math.sin(Date.now()*0.006);
@@ -1555,6 +1569,20 @@ function draw(){
   }
 
   drawParticles();drawRollTrail();
+  // Draw lunge target circles (before characters so characters render on top)
+  if (currentMap === 'slime_map') {
+    for (const s of slimes) {
+      if (!s.alive || s.atkPhase !== 'lunge_windup' || !s.lungeTargetId) continue;
+      const wDur = (s.isKing || s.isGiant) ? WINDUP_GIANT : WINDUP_NORMAL;
+      const prog = 1 - s.atkPhaseTimer / wDur;
+      if (s.lungeTargetId === myId) {
+        drawLungeTarget(player.x, player.y, prog);
+      } else if (others[s.lungeTargetId]) {
+        const op = others[s.lungeTargetId];
+        drawLungeTarget(op.x, op.y, prog);
+      }
+    }
+  }
   for(const op of Object.values(others)) drawOtherChar(op);
   drawChar();
   drawHPBar(player.x,player.y,player.hp,playerMaxHp,54,-44,true,false,false);
@@ -1784,6 +1812,8 @@ async function openStoragePanel() {
 }
 function closeStoragePanel() {
   document.getElementById('storage-panel').style.display = 'none';
+  hideTooltip();
+  hideStatTip();
 }
 
 async function loadStorageItems() {
@@ -2070,6 +2100,7 @@ function closeInventory() {
   document.getElementById('inventory-panel').style.display = 'none';
   document.getElementById('bag-btn').classList.remove('open');
   hideTooltip();
+  hideStatTip();
 }
 
 // ── Derived stats from base + equipped gear ────────────────────────────────

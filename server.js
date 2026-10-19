@@ -26,10 +26,10 @@ const TOWN_HEALER_X = 600, TOWN_HEALER_Y = 300;
 const P_ATK = 3, ATK_RANGE = 50;
 const S_HP=60,   S_ATK=5,  S_SPEED=105, S_R=14,  S_DEF=8,  S_MDEF=4;
 const G_HP=350,  G_ATK=18, G_SPEED=62,  G_R=26,  G_DEF=30, G_MDEF=15;
-const K_HP=3000, K_SPEED=48, K_R=40,              K_DEF=80, K_MDEF=50;
-const K_NORMAL_ATK=6, K_LUNGE_ATK=14, K_EQ_ATK=20;
+const K_HP=3000, K_SPEED=48, K_R=40,               K_DEF=80, K_MDEF=50;
+const K_NORMAL_ATK=10, K_LUNGE_ATK=25, K_EQ_ATK=25;
 const K_NORMAL_ATK_RANGE=65, K_LUNGE_START_RANGE=200, K_EQ_TRIGGER_RANGE=220;
-const K_EQ_RADIUS=175, K_EQ_WINDUP=2.2;
+const K_EQ_RADIUS=240, K_EQ_WINDUP=2.2;
 const K_NORMAL_ATK_CD=2.5, K_LUNGE_CD=8.0, K_EQ_CD=16.0;
 const NORMAL_ATK_RANGE=55, NORMAL_ATK_CD=1.8;
 const BOUNCE_SPEED=155, BOUNCE_DURATION=0.45, HOP_HEIGHT=26, BOUNCE_ABORT_DIST=85;
@@ -276,7 +276,7 @@ function tick() {
             } else if (s.lungeSkillCd <= 0 && distP <= lRange) {
               s.atkPhase = 'lunge_windup'; s.atkPhaseTimer = wDur;
               s.lungeSkillCd = lCd; s.hasHit = false;
-              s.lungeLockedAngle = Math.atan2(near.y - s.y, near.x - s.x);
+              s.lungeTargetId = near.id; // lock onto player — teleports to them on fire
             } else if (s.normalAtkCd <= 0 && distP <= nRange) {
               s.atkPhase = 'normal_bounce'; s.atkPhaseTimer = BOUNCE_DURATION;
               s.bounceTargetX = near.x; s.bounceTargetY = near.y;
@@ -312,43 +312,30 @@ function tick() {
 
           } else if (s.atkPhase === 'lunge_windup') {
             s.atkPhaseTimer -= dt;
-            if (distP > s.r + 10) {
+            // Slow approach during windup (visual only — teleport fires on completion)
+            if (near && distP > s.r + 10) {
               const cx = near.x - s.x, cy = near.y - s.y, cd = Math.hypot(cx, cy);
               s.x += (cx / cd) * s.speed * 0.12 * dt;
               s.y += (cy / cd) * s.speed * 0.12 * dt;
             }
             if (s.atkPhaseTimer <= 0) {
-              const pLen = s.isKing ? 300 : 230;
-              s.atkPhase = 'lunge'; s.atkPhaseTimer = pLen / LUNGE_SPEED + 0.08;
-              s.lungeStartX = s.x; s.lungeStartY = s.y;
-              s.lungeVelX = Math.cos(s.lungeLockedAngle) * LUNGE_SPEED;
-              s.lungeVelY = Math.sin(s.lungeLockedAngle) * LUNGE_SPEED;
-              s.hasHit = false;
+              // Instant teleport to locked target's current position
+              const tgt = s.lungeTargetId ? players.get(s.lungeTargetId) : null;
+              if (tgt && tgt.state && !tgt.state.dead) {
+                s.x = clamp(tgt.state.x, s.r, W - s.r);
+                s.y = clamp(tgt.state.y, s.r, H - s.r);
+                const _pDef = tgt.state.currentDef || 0;
+                const _dmg  = physDmg(s.isKing ? K_LUNGE_ATK : Math.floor(s.atk * 1.5), _pDef);
+                sendToPlayer(s.lungeTargetId, { type: 'player_hit', slimeId: s.id, amount: _dmg, stun: false });
+              }
+              s.lungeTargetId = null;
+              s.atkPhase = 'recovery'; s.atkPhaseTimer = RECOVERY_DUR * (s.isKing ? 1.5 : 1);
             }
 
           } else if (s.atkPhase === 'lunge') {
-            s.atkPhaseTimer -= dt;
-            const pLen    = s.isKing ? 300 : 230;
-            const traveled = Math.hypot(s.x - s.lungeStartX, s.y - s.lungeStartY);
-            if (traveled < pLen) {
-              s.x = clamp(s.x + s.lungeVelX * dt, s.r, W - s.r);
-              s.y = clamp(s.y + s.lungeVelY * dt, s.r, H - s.r);
-            }
-            if (!s.hasHit) {
-              for (const p of alivePlayers('slime_map')) {
-                if (Math.hypot(p.x - s.x, p.y - s.y) <= s.r + 18) {
-                  s.hasHit = true;
-                  const _pDef2 = players.get(p.id)?.state?.currentDef || 0;
-                  const _dmg2  = physDmg(s.isKing ? K_LUNGE_ATK : s.atk, _pDef2);
-                  sendToPlayer(p.id, { type: 'player_hit', slimeId: s.id, amount: _dmg2, stun: false });
-                  break;
-                }
-              }
-            }
-            if (traveled >= pLen || s.atkPhaseTimer <= 0) {
-              s.lungeVelX = 0; s.lungeVelY = 0;
-              s.atkPhase = 'recovery'; s.atkPhaseTimer = RECOVERY_DUR * (s.isKing ? 1.5 : 1);
-            }
+            // Legacy travel phase — no longer entered; safe fallthrough
+            s.atkPhase = 'recovery'; s.atkPhaseTimer = RECOVERY_DUR;
+
 
           } else if (s.atkPhase === 'earthquake_windup') {
             s.atkPhaseTimer -= dt;
@@ -390,7 +377,7 @@ function tick() {
         bodyCol: s.bodyCol, shineCol: s.shineCol,
         flash: s.flash, animT: s.animT, state: s.state,
         atkPhase: s.atkPhase, atkPhaseTimer: s.atkPhaseTimer,
-        hopArc: s.hopArc, lungeLockedAngle: s.lungeLockedAngle,
+        hopArc: s.hopArc, lungeLockedAngle: s.lungeLockedAngle, lungeTargetId: s.lungeTargetId || null,
         earthquakeRadius: s.earthquakeRadius,
       })),
     });
@@ -485,9 +472,13 @@ wss.on('connection', ws => {
         const playerAtk = p.state.currentAtk || P_ATK;
         const dmg = physDmg(playerAtk, s.def);
         s.hp -= dmg; s.flash = 0.15;
-        const ang = Math.atan2(s.y - p.state.y, s.x - p.state.x);
-        const kb  = s.isKing ? 18 : 80;
-        s.kbx = Math.cos(ang) * kb; s.kby = Math.sin(ang) * kb;
+        // Knockback only for melee — ranged (bow) gets none
+        const isRanged = (p.state.currentRange || ATK_RANGE) > ATK_RANGE;
+        if (!isRanged) {
+          const ang = Math.atan2(s.y - p.state.y, s.x - p.state.x);
+          const kb  = s.isKing ? 18 : 80;
+          s.kbx = Math.cos(ang) * kb; s.kby = Math.sin(ang) * kb;
+        }
         s.state = 'aggro';
         broadcastToMap({ type: 'slime_hit', slimeId: s.id, x: s.x, y: s.y, hp: s.hp, maxHp: s.maxHp, dmg }, 'slime_map');
         if (s.hp <= 0) {
@@ -545,7 +536,7 @@ wss.on('connection', ws => {
             bodyCol: s.bodyCol, shineCol: s.shineCol,
             flash: s.flash, animT: s.animT, state: s.state,
             atkPhase: s.atkPhase, atkPhaseTimer: s.atkPhaseTimer,
-            hopArc: s.hopArc, lungeLockedAngle: s.lungeLockedAngle,
+            hopArc: s.hopArc, lungeLockedAngle: s.lungeLockedAngle, lungeTargetId: s.lungeTargetId || null,
             earthquakeRadius: s.earthquakeRadius,
           })) : [],
         });
