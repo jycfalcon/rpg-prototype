@@ -633,7 +633,7 @@ const CLASS_STARTING_STATS = {
 // ── GAME CONSTANTS ────────────────────────────────────────────────────────
 const P_SPEED=130, P_ATK=3, P_REGEN=1;
 const ATK_RANGE=50, ATK_DURATION=0.3, ATK_CD=0.55;
-const SWORD_IDLE=-Math.PI*0.42; // sword held upright, ready to swing down
+const SWORD_IDLE=-Math.PI*0.28; // sword held diagonally up-right, ready stance
 const ROLL_SPEED=340, ROLL_DURATION=0.36, ROLL_CD=1.6;
 const STUN_DURATION=5.0;
 const S_HP=15, G_HP=70, K_HP=200;
@@ -1530,7 +1530,12 @@ function drawChar(){
   ctx.fillStyle=_sk;ctx.fillRect(-3*p,-7*p,6*p,5*p);
   ctx.fillStyle=_hr;ctx.fillRect(-3*p,-7*p,6*p,p);ctx.fillRect(-4*p,-6*p,p,3*p);ctx.fillRect(3*p,-6*p,p,3*p);
   if(player.facing!=='up'){ctx.fillStyle='#1a1a2e';ctx.fillRect(-2*p,-5*p,p,p);ctx.fillRect(p,-5*p,p,p);}
-  if(!rolling && equipped.weapon?.subtype) { drawWeaponOnChar(ctx, p, equipped.weapon.subtype, player.atkTimer>0, sAngle, swingOff); }
+  // Draw weapon — during roll use idle angle (no swing), otherwise normal
+  if (equipped.weapon?.subtype) {
+    const rollAngleForWeapon = rolling ? SWORD_IDLE : sAngle;
+    const rollSwingOff = rolling ? 0 : swingOff;
+    drawWeaponOnChar(ctx, p, equipped.weapon.subtype, !rolling && player.atkTimer>0, rollAngleForWeapon, rollSwingOff);
+  }
   if(stunned){
     const t=Date.now()*0.004;
     for(let i=0;i<4;i++){const a=t+(i*Math.PI/2);const sx2=Math.cos(a)*16,sy2=-16+Math.sin(a)*6;ctx.fillStyle='#f1c40f';ctx.beginPath();ctx.arc(sx2,sy2,3,0,Math.PI*2);ctx.fill();}
@@ -1546,26 +1551,27 @@ function drawWeaponOnChar(ctx, p, subtype, isAtk, sAngle, swingOff) {
     const pull = isAtk ? 3 : 0; // string pulls back when shooting
     // Bow limbs
     ctx.strokeStyle='#7A4520'; ctx.lineWidth=p*1.8; ctx.lineCap='round';
+    // Bow limbs — further left so they clear the character body
     ctx.beginPath();
-    ctx.moveTo(-5, -13);
-    ctx.bezierCurveTo(-20, -9, -20, 9, -5, 13);
+    ctx.moveTo(-10, -13);
+    ctx.bezierCurveTo(-26, -9, -26, 9, -10, 13);
     ctx.stroke();
     // Grip
     ctx.strokeStyle='#4a2a10'; ctx.lineWidth=p*2.8;
-    ctx.beginPath(); ctx.moveTo(-7,-3); ctx.lineTo(-7,3); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-12,-3); ctx.lineTo(-12,3); ctx.stroke();
     // Bowstring
     ctx.strokeStyle='#d8c870'; ctx.lineWidth=p*0.45; ctx.lineCap='round';
     ctx.beginPath();
-    ctx.moveTo(-5,-13); ctx.lineTo(-5+pull,0); ctx.lineTo(-5,13);
+    ctx.moveTo(-10,-13); ctx.lineTo(-10+pull,0); ctx.lineTo(-10,13);
     ctx.stroke();
-    // Arrow shaft
-    ctx.fillStyle='#c8a060'; ctx.fillRect(-5+pull,-p*0.35,18-pull,p*0.7);
+    // Arrow — horizontal shaft from string to front of character
+    ctx.fillStyle='#c8a060'; ctx.fillRect(-10+pull,-p*0.35,24-pull,p*0.7);
     // Arrowhead
     ctx.fillStyle='#9090a8';
-    ctx.beginPath(); ctx.moveTo(13,-p*0.8); ctx.lineTo(17,0); ctx.lineTo(13,p*0.8); ctx.closePath(); ctx.fill();
-    // Fletching
+    ctx.beginPath(); ctx.moveTo(14,-p*0.85); ctx.lineTo(18,0); ctx.lineTo(14,p*0.85); ctx.closePath(); ctx.fill();
+    // Fletching (back of arrow, at string)
     ctx.fillStyle='#b03030';
-    ctx.fillRect(-5+pull,-p*1.3,3,p*0.8); ctx.fillRect(-5+pull,p*0.5,3,p*0.8);
+    ctx.fillRect(-10+pull,-p*1.3,p*1.2,p*0.8); ctx.fillRect(-10+pull,p*0.5,p*1.2,p*0.8);
     ctx.restore();
   } else if (subtype === 'staff') {
     // Staff: tall rod held on right, rotates gently
@@ -1577,14 +1583,16 @@ function drawWeaponOnChar(ctx, p, subtype, isAtk, sAngle, swingOff) {
     ctx.beginPath(); ctx.arc(35, -2, p, 0, Math.PI*2); ctx.fill();
     ctx.restore();
   } else {
-    // Sword (default): rotates with attack
-    ctx.save(); ctx.rotate(sAngle + swingOff);
-    ctx.fillStyle='#7b4c2a'; ctx.fillRect(8,-p,7,p*2);
-    ctx.fillStyle='#b0b0b0'; ctx.fillRect(14,-p*2,p*2,p*4);
-    ctx.fillStyle='#dcdcdc'; ctx.fillRect(16,-p*0.8,22,p*1.6);
-    ctx.fillStyle='rgba(255,255,255,0.65)'; ctx.fillRect(16,-p*0.8,22,p*0.55);
+    // Sword: translate to right hand first, then rotate — grip stays in the hand
+    ctx.save();
+    ctx.translate(8, 2); // right hand position relative to character center
+    ctx.rotate(sAngle + swingOff);
+    ctx.fillStyle='#7b4c2a'; ctx.fillRect(0,-p,5,p*2);       // grip
+    ctx.fillStyle='#b0b0b0'; ctx.fillRect(5,-p*1.5,p,p*3);   // crossguard
+    ctx.fillStyle='#dcdcdc'; ctx.fillRect(6,-p*0.7,20,p*1.4); // blade
+    ctx.fillStyle='rgba(255,255,255,0.65)'; ctx.fillRect(6,-p*0.7,20,p*0.5); // shine
     ctx.fillStyle='#dcdcdc';
-    ctx.beginPath(); ctx.moveTo(38,-p*0.8); ctx.lineTo(38,p*0.8); ctx.lineTo(44,0); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(26,-p*0.7); ctx.lineTo(26,p*0.7); ctx.lineTo(30,0); ctx.closePath(); ctx.fill(); // tip
     ctx.restore();
   }
 }
@@ -2348,7 +2356,7 @@ const SKIN_PAL = ['#FFD0A0','#E8A870','#C88040','#8B5523'];
 const HAIR_PAL = ['#1A1818','#6B3A2A','#D4B830','#B02020','#D8D8E0','#1830C0'];
 const CLASS_SHIRT = { warrior:'#7A1820', archer:'#1A6020', mage:'#1A1878' };
 
-function drawSprite(canvas, skinIdx, hairIdx, hairColIdx, cls, scale) {
+function drawSprite(canvas, skinIdx, hairIdx, hairColIdx, cls, scale, equip) {
   const S = scale || 4;
   const ctx = canvas.getContext('2d');
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -2375,6 +2383,47 @@ function drawSprite(canvas, skinIdx, hairIdx, hairColIdx, cls, scale) {
   r(9,25,14,2,'#18160A');
   r(9,27,5,12,pt); r(18,27,5,12,pt);
   r(8,38,6,4,bt); r(18,38,6,4,bt);
+
+  // ── Equipped weapon overlay ──────────────────────────────────────────────
+  const wSub = equip?.weapon?.subtype;
+  if (wSub) {
+    if (wSub === 'bow') {
+      // Bow: vertical D-shape on left side
+      ctx.strokeStyle='#7A4520'; ctx.lineWidth=S*1.3; ctx.lineCap='round';
+      ctx.beginPath();
+      ctx.moveTo(4*S, 15*S);
+      ctx.bezierCurveTo(-1*S, 19*S, -1*S, 29*S, 4*S, 33*S);
+      ctx.stroke();
+      // Grip
+      ctx.strokeStyle='#4a2a10'; ctx.lineWidth=S*2;
+      ctx.beginPath(); ctx.moveTo(3*S,23*S); ctx.lineTo(3*S,25*S); ctx.stroke();
+      // String
+      ctx.strokeStyle='#d8c870'; ctx.lineWidth=S*0.4;
+      ctx.beginPath(); ctx.moveTo(4*S,15*S); ctx.lineTo(4*S,33*S); ctx.stroke();
+      // Arrow
+      ctx.fillStyle='#c8a060'; ctx.fillRect(4*S, 23*S-S*0.35, 13*S, S*0.7);
+      ctx.fillStyle='#9090a8';
+      ctx.beginPath(); ctx.moveTo(17*S,23*S-S*0.8); ctx.lineTo(20*S,23*S); ctx.lineTo(17*S,23*S+S*0.8); ctx.closePath(); ctx.fill();
+    } else if (wSub === 'sword') {
+      // Sword: diagonal from right hand pointing upward
+      ctx.save(); ctx.translate(26*S, 24*S); ctx.rotate(-0.75);
+      ctx.fillStyle='#7b4c2a'; ctx.fillRect(0,-S*0.5,3*S,S);
+      ctx.fillStyle='#b0b0b0'; ctx.fillRect(3*S,-S,S*0.8,S*2);
+      ctx.fillStyle='#dcdcdc'; ctx.fillRect(4*S,-S*0.45,9*S,S*0.9);
+      ctx.fillStyle='rgba(255,255,255,0.5)'; ctx.fillRect(4*S,-S*0.45,9*S,S*0.4);
+      ctx.fillStyle='#dcdcdc';
+      ctx.beginPath(); ctx.moveTo(13*S,-S*0.45); ctx.lineTo(13*S,S*0.45); ctx.lineTo(15*S,0); ctx.closePath(); ctx.fill();
+      ctx.restore();
+    } else if (wSub === 'staff') {
+      // Staff: tall rod on right side with orb
+      ctx.strokeStyle='#8B5A2B'; ctx.lineWidth=S*1.1; ctx.lineCap='round';
+      ctx.beginPath(); ctx.moveTo(27*S,4*S); ctx.lineTo(27*S,38*S); ctx.stroke();
+      ctx.fillStyle='#6060e8';
+      ctx.beginPath(); ctx.arc(27*S,4*S,S*2,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='rgba(180,180,255,0.55)';
+      ctx.beginPath(); ctx.arc(25*S,3*S,S,0,Math.PI*2); ctx.fill();
+    }
+  }
 }
 
 // ── INVENTORY ─────────────────────────────────────────────────────────────
@@ -2467,7 +2516,7 @@ function refreshInventoryUI() {
     const sk = parseInt(localStorage.getItem('rpg_skin_tone')  || '0');
     const hs = parseInt(localStorage.getItem('rpg_hair_style') || '0');
     const hc = parseInt(localStorage.getItem('rpg_hair_color') || '0');
-    drawSprite(canvas, sk, hs, hc, rpg_char_class, 3);
+    drawSprite(canvas, sk, hs, hc, rpg_char_class, 3, equipped);
   }
 
   // Gear slots
@@ -2552,14 +2601,23 @@ function equipFromInventory(idx) {
     slotKey = !equipped.accessory1 ? 'accessory1' : 'accessory2';
   }
 
-  // Swap existing into inventory at same index, or just remove
-  if (equipped[slotKey]) {
-    inventory[idx] = equipped[slotKey];
+  // Swap existing item out to inventory
+  const displaced = equipped[slotKey];
+  if (displaced) {
+    inventory[idx] = displaced;
+    // Persist: displaced item no longer equipped
+    sbClient.from('items').update({ equipped: false }).eq('id', displaced.id)
+      .then(({ error }) => { if (error) console.warn('unequip DB:', error.message); });
   } else {
     inventory.splice(idx, 1);
   }
+
   equipped[slotKey] = item;
   refreshInventoryUI();
+
+  // Persist: new item is now equipped
+  sbClient.from('items').update({ equipped: true }).eq('id', item.id)
+    .then(({ error }) => { if (error) console.warn('equip DB:', error.message); });
 }
 
 function unequipSlot(slotKey) {
@@ -2572,6 +2630,10 @@ function unequipSlot(slotKey) {
   inventory.push(item);
   equipped[slotKey] = null;
   refreshInventoryUI();
+
+  // Persist: item is no longer equipped
+  sbClient.from('items').update({ equipped: false }).eq('id', item.id)
+    .then(({ error }) => { if (error) console.warn('unequip DB:', error.message); });
 }
 
 // ── Tooltip ────────────────────────────────────────────────────────────────
