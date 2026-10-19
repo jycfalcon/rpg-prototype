@@ -115,7 +115,7 @@ function awardXP(pid, amount) {
     p.state.xp      -= p.state.xpToNext;
     p.state.level   += 1;
     p.state.xpToNext = xpToNext(p.state.level);
-    p.state.statPoints += 1;
+    p.state.statPoints += 3;
     leveledUp = true;
   }
   send(p.ws, {

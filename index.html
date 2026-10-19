@@ -308,6 +308,14 @@
 <!-- MAP FADE OVERLAY -->
 <div id="map-fade"></div>
 
+<!-- XP BAR — bottom center, below where skill bar will go -->
+<div id="xp-bar" style="position:fixed;bottom:68px;left:50%;transform:translateX(-50%);z-index:200;text-align:center;pointer-events:none;">
+  <div id="xp-text" style="font-family:'Courier New',monospace;font-size:10px;color:#888888;margin-bottom:3px;letter-spacing:0.08em;white-space:nowrap;">Lv 1 — 0 / 100 XP</div>
+  <div style="width:280px;height:5px;background:#111128;border:1px solid #2a2a50;overflow:hidden;">
+    <div id="xp-fill" style="height:100%;background:#c8a800;width:0%;transition:width 0.4s;"></div>
+  </div>
+</div>
+
 <!-- BAG BUTTON — always visible, opens inventory -->
 <button id="bag-btn" onclick="inventoryOpen ? closeInventory() : openInventory()" title="Inventory [B]">🎒</button>
 
@@ -556,23 +564,24 @@ function connectWS() {
       }
 
       if (msg.type === 'auth_ok') {
-        playerMaxHp    = msg.maxHp;
-        player.hp      = playerMaxHp;
-        playerLevel    = msg.level    || 1;
-        playerXP       = msg.xp       || 0;
-        playerXPToNext = msg.xpToNext || 100;
+        playerMaxHp     = msg.maxHp;
+        player.hp       = playerMaxHp;
+        playerLevel     = msg.level      || 1;
+        playerXP        = msg.xp         || 0;
+        playerXPToNext  = msg.xpToNext   || 100;
         availablePoints = msg.statPoints || 0;
+        updateXPBar();
         loadInventory();
       }
 
       if (msg.type === 'xp_update') {
-        playerXP       = msg.xp;
-        playerXPToNext = msg.xpToNext;
+        playerXP        = msg.xp;
+        playerXPToNext  = msg.xpToNext;
         availablePoints = msg.statPoints;
-        const prevLevel = playerLevel;
-        playerLevel    = msg.level;
+        playerLevel     = msg.level;
+        updateXPBar();
         if (msg.leveledUp) {
-          addFloat(player.x, player.y - 60, `LEVEL UP! ${playerLevel}`, '#f1c40f', 20);
+          addFloat(player.x, player.y - 60, `▲ LEVEL ${playerLevel}!`, '#f1c40f', 22);
           burst(player.x, player.y, '#f1c40f', 20);
           if (inventoryOpen) refreshStatsPanel();
         }
@@ -1368,15 +1377,9 @@ function drawHUD(){
   const hr=Math.max(0,player.hp/playerMaxHp);
   ctx.fillStyle=hr>0.6?'#2ecc40':hr>0.3?'#f39c12':'#e74c3c';ctx.fillRect(15,27,Math.floor(bw*hr),18);
   ctx.fillStyle='#fff';ctx.font='bold 11px monospace';ctx.textAlign='center';ctx.fillText(`${Math.ceil(player.hp)} / ${playerMaxHp}`,15+bw/2,40);
-  // XP bar
-  ctx.fillStyle='#1a1a2e';ctx.fillRect(15,45,bw,6);
-  const xratio=Math.min(1,playerXP/playerXPToNext);
-  ctx.fillStyle='#c8a800';ctx.fillRect(15,45,Math.floor(bw*xratio),6);
-  ctx.fillStyle='#666';ctx.font='8px monospace';ctx.textAlign='left';
-  ctx.fillText(`Lv ${playerLevel}  XP ${playerXP}/${playerXPToNext}`,15,43);
-  ctx.fillStyle=player.atkCd>0?'#888':'#f1c40f';ctx.font='9px monospace';ctx.textAlign='left';ctx.fillText(player.atkCd>0?`ATK ${player.atkCd.toFixed(1)}s`:'ATK RDY',15,62);
-  ctx.fillStyle=rollCd>0?'#888':'#88aaff';ctx.fillText(rollCd>0?`ROLL ${rollCd.toFixed(1)}s`:'ROLL RDY',90,62);
-  ctx.fillStyle='#3a8a3a';ctx.fillText(`♥ +${P_REGEN}/s`,15,74);
+  ctx.fillStyle=player.atkCd>0?'#888':'#f1c40f';ctx.font='9px monospace';ctx.textAlign='left';ctx.fillText(player.atkCd>0?`ATK ${player.atkCd.toFixed(1)}s`:'ATK RDY',15,58);
+  ctx.fillStyle=rollCd>0?'#888':'#88aaff';ctx.fillText(rollCd>0?`ROLL ${rollCd.toFixed(1)}s`:'ROLL RDY',90,58);
+  ctx.fillStyle='#3a8a3a';ctx.fillText(`♥ +${P_REGEN}/s`,15,70);
 
   if(stunned){
     ctx.fillStyle='rgba(20,15,0,0.9)';ctx.fillRect(10,84,bw+10,24);
@@ -1634,6 +1637,13 @@ function doMapTransition(callback){
 }
 
 // ── STORAGE ───────────────────────────────────────────────────────────────
+function updateXPBar() {
+  const t = document.getElementById('xp-text');
+  const f = document.getElementById('xp-fill');
+  if (t) t.textContent = `Lv ${playerLevel}  —  ${playerXP} / ${playerXPToNext} XP`;
+  if (f) f.style.width = Math.min(100, (playerXP / playerXPToNext) * 100).toFixed(1) + '%';
+}
+
 function openStoragePanel(){
   document.getElementById('storage-panel').style.display = 'block';
 }
@@ -1647,10 +1657,15 @@ async function loadInventory() {
   const token  = localStorage.getItem('rpg_token');
   if (!charId || !token) return;
   try {
-    // Set auth token so RLS knows who we are
-    const { data: { session } } = await sbClient.auth.getSession();
+    // Supabase JS v2 restores auth session from localStorage automatically.
+    // If session has expired, set it manually with the stored token.
+    let { data: { session } } = await sbClient.auth.getSession();
     if (!session) {
-      await sbClient.auth.setSession({ access_token: token, refresh_token: token });
+      const { data } = await sbClient.auth.setSession({
+        access_token:  token,
+        refresh_token: localStorage.getItem('rpg_refresh_token') || token,
+      });
+      session = data.session;
     }
     const { data: items, error } = await sbClient
       .from('items')
@@ -1894,10 +1909,11 @@ function renderInventoryGrid() {
     if (item) {
       slot.className = 'inv-item filled';
       slot.dataset.idx = i;
-      // Icon + favourite star
-      const starHtml = item.favourited ? '<span style="position:absolute;top:2px;right:3px;font-size:9px;color:#f1c40f">★</span>' : '';
       slot.style.position = 'relative';
-      slot.innerHTML = itemIcon(item) + starHtml;
+      const starHtml = item.favourited
+        ? `<div style="position:absolute;top:2px;right:3px;font-size:11px;color:#f1c40f;line-height:1;pointer-events:none;">★</div>`
+        : '';
+      slot.innerHTML = `<span style="font-size:20px;pointer-events:none;">${itemIcon(item)}</span>${starHtml}`;
       slot.addEventListener('dblclick',     ()  => equipFromInventory(i));
       slot.addEventListener('contextmenu',  (e) => openCtxMenu(e, i));
       slot.addEventListener('mouseenter',   (e) => showTooltip(e, item));

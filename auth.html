@@ -213,6 +213,12 @@
     .char-name { font-size: 0.9rem; color: #dcdcf8; margin-bottom: 0.2rem; }
     .char-meta { font-size: 0.68rem; color: #404080; }
     .char-stats { font-size: 0.62rem; color: #303068; text-align: right; line-height: 1.9; }
+    .char-delete {
+      background:transparent; border:1px solid #401818; color:#804040;
+      cursor:pointer; padding:3px 8px; font-size:11px; border-radius:2px;
+      font-family:inherit; transition:all 0.15s; flex-shrink:0;
+    }
+    .char-delete:hover { background:#200a0a; border-color:#c04040; color:#f08080; }
 
     hr.div { border: none; border-top: 1px solid #1a1a30; margin: 1.25rem 0; }
 
@@ -587,7 +593,7 @@ function renderCharList(chars, session) {
     const card = document.createElement('div');
     card.className = 'char-card';
     card.innerHTML = `
-      <div>
+      <div style="flex:1">
         <div class="char-name">${icons[c.class]||''} ${c.name}</div>
         <div class="char-meta">${c.class.toUpperCase()} &nbsp;·&nbsp; Lv ${c.level} &nbsp;·&nbsp; ${c.xp} XP</div>
       </div>
@@ -595,14 +601,27 @@ function renderCharList(chars, session) {
         STR ${c.strength} &nbsp; DEX ${c.dexterity}<br>
         VIT ${c.vitality} &nbsp; AGI ${c.agility}<br>
         INT ${c.intelligence} &nbsp; LUK ${c.luck}
-      </div>`;
+      </div>
+      <button class="char-delete" title="Delete character">🗑</button>`;
+    card.querySelector('.char-delete').addEventListener('click', e => {
+      e.stopPropagation();
+      deleteCharacter(c.id, c.name, session);
+    });
     card.onclick = () => enterWorld(c, session);
     list.appendChild(card);
   });
 }
 
+async function deleteCharacter(charId, charName, session) {
+  if (!confirm(`Delete "${charName}"?\n\nThis cannot be undone. All items will be lost.`)) return;
+  const { error } = await db.from('characters').delete().eq('id', charId);
+  if (error) { alert('Could not delete: ' + error.message); return; }
+  await afterLogin(); // refresh character list
+}
+
 function enterWorld(character, session) {
-  localStorage.setItem('rpg_token',      session.access_token);
+  localStorage.setItem('rpg_token',         session.access_token);
+  localStorage.setItem('rpg_refresh_token', session.refresh_token || '');
   localStorage.setItem('rpg_char_id',    character.id);
   localStorage.setItem('rpg_char_name',  character.name);
   localStorage.setItem('rpg_char_class', character.class);
