@@ -263,7 +263,7 @@
   .tt-stat { color:#90c0ff; font-size:11px; }
   /* ── SKILL BAR ───────────────────────────────────────────────────── */
   #skill-bar {
-    position:fixed; bottom:82px; left:50%; transform:translateX(-50%);
+    position:fixed; bottom:100px; left:50%; transform:translateX(-50%);
     display:flex; gap:5px; z-index:200; pointer-events:all;
   }
   .sk-bar-slot {
@@ -441,7 +441,7 @@
 <div id="map-fade"></div>
 
 <!-- XP BAR — bottom center, below where skill bar will go -->
-<div id="xp-bar" style="position:fixed;bottom:68px;left:50%;transform:translateX(-50%);z-index:200;text-align:center;pointer-events:none;">
+<div id="xp-bar" style="position:fixed;bottom:54px;left:50%;transform:translateX(-50%);z-index:200;text-align:center;pointer-events:none;">
   <div id="xp-text" style="font-family:'Courier New',monospace;font-size:10px;color:#888888;margin-bottom:3px;letter-spacing:0.08em;white-space:nowrap;">Lv 1 — 0 / 100 XP</div>
   <div style="width:280px;height:5px;background:#111128;border:1px solid #2a2a50;overflow:hidden;">
     <div id="xp-fill" style="height:100%;background:#c8a800;width:0%;transition:width 0.4s;"></div>
@@ -636,6 +636,16 @@ const CLASS_MAX_HP = { warrior: 32, archer: 22, mage: 26 };
 let playerMaxHp = CLASS_MAX_HP[rpg_char_class] || 32;
 
 // ── SUPABASE CLIENT ───────────────────────────────────────────────────────
+// Ensure Supabase session is active before making DB calls
+async function ensureDbAuth() {
+  let { data: { session } } = await sbClient.auth.getSession();
+  if (!session) {
+    const t = localStorage.getItem('rpg_token');
+    const r = localStorage.getItem('rpg_refresh_token');
+    if (t) { const { data } = await sbClient.auth.setSession({ access_token:t, refresh_token:r||t }); session=data?.session; }
+  }
+  return !!session;
+}
 const { createClient } = supabase;
 const sbClient = createClient(
   'https://qlehgpddqxkgdvfhwtdu.supabase.co',
@@ -680,14 +690,18 @@ function connectWS() {
     wsStatus = 'online';
     // Send character data on connect — server sets player name/class/hp/appearance
     ws.send(JSON.stringify({
-      type:         'auth',
-      charName:     rpg_char_name,
-      charClass:    rpg_char_class,
-      maxHp:        playerMaxHp,
-      skinTone:     parseInt(localStorage.getItem('rpg_skin_tone')  || '0'),
-      hairStyle:    parseInt(localStorage.getItem('rpg_hair_style') || '0'),
-      hairColor:    parseInt(localStorage.getItem('rpg_hair_color') || '0'),
-      weaponSubtype: null, // will update after inventory loads
+      type:          'auth',
+      charName:      rpg_char_name,
+      charClass:     rpg_char_class,
+      maxHp:         playerMaxHp,
+      level:         playerLevel,
+      xp:            playerXP,
+      statPoints:    availablePoints,
+      skillPoints:   availableSkillPoints,
+      skinTone:      parseInt(localStorage.getItem('rpg_skin_tone')  || '0'),
+      hairStyle:     parseInt(localStorage.getItem('rpg_hair_style') || '0'),
+      hairColor:     parseInt(localStorage.getItem('rpg_hair_color') || '0'),
+      weaponSubtype: null,
     }));
   };
 
@@ -734,6 +748,12 @@ function connectWS() {
         availableSkillPoints = msg.skillPoints || availableSkillPoints;
         playerLevel     = msg.level;
         updateXPBar();
+        // Persist level/xp to Supabase so it survives reconnects
+        const _charId = localStorage.getItem('rpg_char_id');
+        if (_charId) {
+          sbClient.from('characters').update({ level: playerLevel, xp: playerXP }).eq('id', _charId)
+            .then(({ error }) => { if (error) console.warn('save xp:', error.message); });
+        }
         if (msg.leveledUp) {
           addFloat(player.x, player.y - 60, `▲ LEVEL ${playerLevel}!`, '#f1c40f', 22);
           burst(player.x, player.y, '#f1c40f', 20);
@@ -823,7 +843,31 @@ function connectWS() {
     } catch(_) {}
   };
 }
-connectWS();
+// Load saved progression from Supabase before connecting so auth message carries real level/xp
+(async () => {
+  const charId = localStorage.getItem('rpg_char_id');
+  if (charId) {
+    try {
+      await ensureDbAuth();
+      const { data } = await sbClient
+        .from('characters')
+        .select('level, xp, stat_points_used, skill_points_used')
+        .eq('id', charId)
+        .single();
+      if (data) {
+        playerLevel    = data.level || 1;
+        playerXP       = data.xp    || 0;
+        playerXPToNext = 100 + (playerLevel - 1) * 50;
+        // Available stat points = earned - spent
+        const statSpent   = Object.values(data.stat_points_used || {}).reduce((a,b)=>a+b,0);
+        const skillSpent  = data.skill_points_used || 0;
+        availablePoints      = Math.max(0, (playerLevel - 1) * 3 - statSpent);
+        availableSkillPoints = Math.max(0, playerLevel - skillSpent);
+      }
+    } catch(e) { console.warn('load progression:', e); }
+  }
+  connectWS();
+})();
 
 // ── STATE ─────────────────────────────────────────────────────────────────
 let currentMap = 'town';
@@ -907,6 +951,7 @@ let targetSlime=null, autoMove=false, autoAttackedOnce=false;
 let rolling=false, rollTimer=0, rollCd=0, rollAngle=0, rollInvincible=false, rollTrail=[];
 let walkCycle=0;
 let impacts=[];
+let mouseWorldX=0, mouseWorldY=0; // cursor position in world space (for ground-target skills)
 let charSpriteCanvas = null;  // offscreen canvas — world character body
 let charSpriteDirty  = true;  // rebuild on next frame if appearance/equipment changed
 let mouseDown=false;
@@ -1006,6 +1051,10 @@ window.addEventListener('keydown', e => {
 });
 window.addEventListener('keyup', e => { keys[e.key.toLowerCase()] = false; });
 
+c.addEventListener('mousemove', e => {
+  mouseWorldX = e.clientX - canvasRect.left + cam.x;
+  mouseWorldY = e.clientY - canvasRect.top  + cam.y;
+});
 c.addEventListener('mousedown', e => {
   const cx=e.clientX-canvasRect.left, cy=e.clientY-canvasRect.top;
   if(player.dead){const btn=getDeadBtn();if(cx>=btn.x&&cx<=btn.x+btn.w&&cy>=btn.y&&cy<=btn.y+btn.h)resetGame();return;}
@@ -1737,14 +1786,15 @@ function drawHUD(){
   ctx.fillStyle=hr>0.6?'#2ecc40':hr>0.3?'#f39c12':'#e74c3c';ctx.fillRect(15,27,Math.floor(bw*hr),18);
   ctx.fillStyle='#fff';ctx.font='bold 11px monospace';ctx.textAlign='center';ctx.fillText(`${Math.ceil(player.hp)} / ${playerMaxHp}`,15+bw/2,40);
   // MP bar
-  ctx.fillStyle='#0a0a1e';ctx.fillRect(15,47,bw,6);
+  ctx.fillStyle='#0a0a14';ctx.fillRect(15,47,bw,10);
   const mratio=Math.max(0,playerMP/Math.max(1,playerMaxMp));
-  ctx.fillStyle='#2255cc';ctx.fillRect(15,47,Math.floor(bw*mratio),6);
-  ctx.fillStyle='#8899cc';ctx.font='8px monospace';ctx.textAlign='left';
-  ctx.fillText(`${Math.ceil(playerMP)}/${playerMaxMp} MP`,15,44);
-  ctx.fillStyle=player.atkCd>0?'#888':'#f1c40f';ctx.font='9px monospace';ctx.textAlign='left';ctx.fillText(player.atkCd>0?`ATK ${player.atkCd.toFixed(1)}s`:'ATK RDY',15,63);
-  ctx.fillStyle=rollCd>0?'#888':'#88aaff';ctx.fillText(rollCd>0?`ROLL ${rollCd.toFixed(1)}s`:'ROLL RDY',90,63);
-  ctx.fillStyle='#3a8a3a';ctx.fillText(`♥ +${P_REGEN}/s`,15,75);
+  ctx.fillStyle='#1a44bb';ctx.fillRect(15,47,Math.floor(bw*mratio),10);
+  ctx.fillStyle='#8899dd';ctx.font='bold 9px monospace';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(`${Math.ceil(playerMP)} / ${playerMaxMp} MP`,15+bw/2,52);
+  ctx.textBaseline='alphabetic';
+  ctx.fillStyle=player.atkCd>0?'#888':'#f1c40f';ctx.font='9px monospace';ctx.textAlign='left';ctx.fillText(player.atkCd>0?`ATK ${player.atkCd.toFixed(1)}s`:'ATK RDY',15,66);
+  ctx.fillStyle=rollCd>0?'#888':'#88aaff';ctx.fillText(rollCd>0?`ROLL ${rollCd.toFixed(1)}s`:'ROLL RDY',90,66);
+  ctx.fillStyle='#3a8a3a';ctx.fillText(`♥ +${P_REGEN}/s`,15,78);
   drawBuffIcons();
 
   if(stunned){
@@ -2154,6 +2204,13 @@ function learnSkill(skillId) {
   if (lv >= skill.maxLevel) return;
   availableSkillPoints--;
   playerSkills[skillId] = lv + 1;
+  // Persist spent skill points
+  const _cid = localStorage.getItem('rpg_char_id');
+  if (_cid) {
+    const totalSpent = Object.values(playerSkills).reduce((a,b)=>a+b,0);
+    sbClient.from('characters').update({ skill_points_used: totalSpent }).eq('id', _cid)
+      .then(({ error }) => { if (error) console.warn('save skill pts:', error.message); });
+  }
   // Auto-add to skill bar on first learn (active skills only)
   if (lv === 0 && (skill.type === 'active_buff' || skill.type === 'active_dmg')) {
     const freeSlot = skillBarSlots.indexOf(null);
@@ -2171,8 +2228,49 @@ function unlearnSkill(skillId) {
   if (lv <= 0) return;
   playerSkills[skillId] = lv - 1;
   availableSkillPoints++;
+  // Remove from skill bar if fully unlearned
+  if (playerSkills[skillId] === 0) {
+    const idx = skillBarSlots.indexOf(skillId);
+    if (idx >= 0) { skillBarSlots[idx] = null; renderSkillBar(); }
+  }
   renderSkillPanel();
   if (inventoryOpen) refreshStatsPanel();
+}
+
+// ── SKILL SLOT ASSIGNMENT MENU ────────────────────────────────────────────
+function openSkillSlotMenu(slotIdx, mx, my) {
+  closeSkillSlotMenu();
+  const learned = (CLASS_SKILLS[rpg_char_class]||[])
+    .filter(s => (s.type==='active_buff'||s.type==='active_dmg') && (playerSkills[s.id]||0)>0);
+  const menu = document.createElement('div');
+  menu.id = 'skill-slot-menu';
+  menu.style.cssText = `position:fixed;left:${Math.min(mx,window.innerWidth-160)}px;top:${Math.min(my,window.innerHeight-120)}px;z-index:900;background:#0e0e28;border:1px solid #4040a0;font-family:'Courier New',monospace;min-width:150px;`;
+  const header = document.createElement('div');
+  header.style.cssText = 'padding:5px 12px;font-size:8px;color:#5050a0;border-bottom:1px solid #252550;letter-spacing:0.15em;';
+  header.textContent = `SLOT ${slotIdx+1}`;
+  menu.appendChild(header);
+  learned.forEach(skill => {
+    const opt = document.createElement('div');
+    opt.style.cssText = 'padding:9px 12px;cursor:pointer;font-size:10px;color:#c8c8f0;';
+    opt.textContent = `${SKILL_ICONS[skill.id]||'?'} ${skill.name}`;
+    opt.addEventListener('mouseenter',()=>opt.style.background='#1a1a40');
+    opt.addEventListener('mouseleave',()=>opt.style.background='');
+    opt.addEventListener('click', e => { e.stopPropagation(); skillBarSlots[slotIdx]=skill.id; renderSkillBar(); closeSkillSlotMenu(); });
+    menu.appendChild(opt);
+  });
+  const clearOpt = document.createElement('div');
+  clearOpt.style.cssText = 'padding:8px 12px;cursor:pointer;font-size:9px;color:#404060;border-top:1px solid #1a1a30;';
+  clearOpt.textContent = '— Clear slot —';
+  clearOpt.addEventListener('mouseenter',()=>clearOpt.style.background='#0a0a20');
+  clearOpt.addEventListener('mouseleave',()=>clearOpt.style.background='');
+  clearOpt.addEventListener('click', e => { e.stopPropagation(); skillBarSlots[slotIdx]=null; renderSkillBar(); closeSkillSlotMenu(); });
+  menu.appendChild(clearOpt);
+  document.body.appendChild(menu);
+  setTimeout(() => document.addEventListener('click', closeSkillSlotMenu, {once:true}), 0);
+}
+function closeSkillSlotMenu() {
+  const m = document.getElementById('skill-slot-menu');
+  if (m) m.remove();
 }
 
 function updateXPBar() {
@@ -2467,7 +2565,8 @@ function buildSkillBar() {
     const slot = document.createElement('div');
     slot.className = 'sk-bar-slot';
     slot.id = `sk-bar-${i}`;
-    slot.addEventListener('click', () => useSkillSlot(i));
+    slot.addEventListener('click',       () => useSkillSlot(i));
+    slot.addEventListener('contextmenu', e  => { e.preventDefault(); openSkillSlotMenu(i, e.clientX, e.clientY); });
     slot.innerHTML = `
       <div class="sk-bar-icon" id="sk-bar-icon-${i}">·</div>
       <div class="sk-bar-key">${i+1}</div>
@@ -2556,12 +2655,36 @@ function activateHaste(level) {
   renderSkillBar();
 }
 
+// Returns a slime under the cursor or the current targetSlime — no forced auto-attack needed
+function getSkillTarget() {
+  if (targetSlime?.alive) return targetSlime;
+  for (const s of slimes) {
+    if (!s.alive) continue;
+    if (Math.hypot(mouseWorldX - s.x, mouseWorldY - s.y) < s.r + 24) return s;
+  }
+  return null;
+}
+
 function activateArrowRain(level) {
-  let tx = player.x, ty = player.y + 80;
-  if (targetSlime?.alive) {
+  const CAST_RANGE = 150;
+  let tx, ty;
+  // Ground-castable: prioritise cursor position
+  const mouseDist = Math.hypot(mouseWorldX - player.x, mouseWorldY - player.y);
+  if (mouseDist > 20) {
+    // Use cursor, clamped to cast range
+    if (mouseDist <= CAST_RANGE) {
+      tx = mouseWorldX; ty = mouseWorldY;
+    } else {
+      const ang = Math.atan2(mouseWorldY - player.y, mouseWorldX - player.x);
+      tx = player.x + Math.cos(ang) * CAST_RANGE;
+      ty = player.y + Math.sin(ang) * CAST_RANGE;
+    }
+  } else if (targetSlime?.alive) {
     const dx=targetSlime.x-player.x, dy=targetSlime.y-player.y, d=Math.hypot(dx,dy);
-    tx = d<=155 ? targetSlime.x : player.x+(dx/d)*150;
-    ty = d<=155 ? targetSlime.y : player.y+(dy/d)*150;
+    tx = d<=CAST_RANGE+5 ? targetSlime.x : player.x+(dx/d)*CAST_RANGE;
+    ty = d<=CAST_RANGE+5 ? targetSlime.y : player.y+(dy/d)*CAST_RANGE;
+  } else {
+    tx = player.x; ty = player.y + 80;
   }
   const aoeRadius = 100;
   spawnSkillAoe(tx, ty, aoeRadius, '#4488ff', 2.2);
@@ -2585,16 +2708,17 @@ function activateBattleCry(level) {
 }
 
 function activateShieldBash(level) {
-  if (!targetSlime?.alive) { addFloat(player.x,player.y-40,'NO TARGET','#888',12); skillCooldowns.shield_bash=0; playerMP+=11+level*3; return; }
+  const bashTarget = getSkillTarget();
+  if (!bashTarget) { addFloat(player.x,player.y-40,'NO TARGET','#888',12); skillCooldowns.shield_bash=0; playerMP+=11+level*3; return; }
   if (equipped.weapon?.subtype !== 'sword') { addFloat(player.x,player.y-40,'SWORD REQUIRED','#888',12); skillCooldowns.shield_bash=0; playerMP+=11+level*3; return; }
   addFloat(player.x, player.y-30, '💥 BASH!', '#ffffff', 20);
   // Impact star at target
   for (let i=0;i<12;i++) {
     const a=(i/12)*Math.PI*2;
-    particles.push({x:targetSlime.x,y:targetSlime.y,vx:Math.cos(a)*90,vy:Math.sin(a)*90,color:i%2?'#ffffff':'#ffcc44',sz:3,life:0.25,max:0.25});
+    particles.push({x:bashTarget.x,y:bashTarget.y,vx:Math.cos(a)*90,vy:Math.sin(a)*90,color:i%2?'#ffffff':'#ffcc44',sz:3,life:0.25,max:0.25});
   }
-  spawnImpact(targetSlime.x, targetSlime.y-10, '#ffffff');
-  if (ws&&ws.readyState===1) ws.send(JSON.stringify({type:'use_skill',skillId:'shield_bash',skillLevel:level,targetSlimeId:targetSlime.id}));
+  spawnImpact(bashTarget.x, bashTarget.y-10, '#ffffff');
+  if (ws&&ws.readyState===1) ws.send(JSON.stringify({type:'use_skill',skillId:'shield_bash',skillLevel:level,targetSlimeId:bashTarget.id}));
 }
 
 // ── BUFF SYSTEM ───────────────────────────────────────────────────────────
@@ -2677,19 +2801,19 @@ function drawSkillAoes() {
 }
 
 function drawBuffIcons() {
-  // Small buff icons shown near the HP bar
-  let bx = 190, by = 15;
+  // Buff icons drawn BELOW the HUD box (box ends at y=10+82=92)
+  let bx = 12, by = 95;
   for (const [buffId, buff] of Object.entries(activeBuffs)) {
     const now = Date.now();
-    if (now >= buff.expiresAt) { delete activeBuffs[buffId]; continue; }
+    if (now >= buff.expiresAt) { delete activeBuffs[buffId]; renderSkillBar(); continue; }
     const timeLeft = (buff.expiresAt - now) / 1000;
     const color = buffId==='haste' ? '#00eeff' : '#ff8800';
     const icon  = SKILL_ICONS[buffId] || '?';
-    ctx.fillStyle = color+'22'; ctx.fillRect(bx, by, 36, 18);
-    ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.strokeRect(bx, by, 36, 18);
+    ctx.fillStyle = 'rgba(8,8,18,0.82)'; ctx.fillRect(bx, by, 40, 18);
+    ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.strokeRect(bx, by, 40, 18);
     ctx.fillStyle = color; ctx.font = '9px monospace'; ctx.textAlign = 'left';
-    ctx.fillText(`${icon}${Math.ceil(timeLeft)}s`, bx+2, by+13);
-    bx += 40;
+    ctx.fillText(`${icon} ${Math.ceil(timeLeft)}s`, bx+3, by+13);
+    bx += 44;
   }
 }
 
@@ -3093,10 +3217,20 @@ function applyAllocation() {
     if (v > 0) base[k] = (base[k] || 0) + v;
   }
   pendingStats = { strength:0, vitality:0, dexterity:0, agility:0, intelligence:0, luck:0 };
-  // Update max HP in game
   const derived = computeDerived(getBaseStats(), {});
   playerMaxHp = derived.HP.val;
   player.hp = Math.min(player.hp, playerMaxHp);
+  // Persist stat_points_used: diff between current stats and class base
+  const _sCharId = localStorage.getItem('rpg_char_id');
+  if (_sCharId) {
+    const _baseOrig = { warrior:{strength:8,vitality:6,agility:3,dexterity:2,intelligence:0,luck:1}, archer:{strength:2,vitality:1,agility:5,dexterity:8,intelligence:0,luck:4}, mage:{strength:0,vitality:3,agility:1,dexterity:6,intelligence:10,luck:0} };
+    const _orig = _baseOrig[rpg_char_class] || _baseOrig.warrior;
+    const _curr = CLASS_STARTING_STATS[rpg_char_class] || {};
+    const _used = {};
+    for (const k of ['strength','vitality','dexterity','agility','intelligence','luck']) { const d=(_curr[k]||0)-(_orig[k]||0); if(d>0)_used[k]=d; }
+    sbClient.from('characters').update({ stat_points_used: _used }).eq('id', _sCharId)
+      .then(({ error }) => { if (error) console.warn('save stat pts:', error.message); });
+  }
   refreshStatsPanel();
 }
 

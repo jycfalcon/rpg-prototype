@@ -434,14 +434,22 @@ wss.on('connection', ws => {
       // Client sends this on WS open — updates name, class, hp from character data
       if (msg.type === 'auth') {
         const maxHp = msg.maxHp || defaultMaxHp(msg.charClass);
-        p.state.charName     = msg.charName  || 'Player';
-        p.state.charClass    = msg.charClass || 'warrior';
-        p.state.maxHp        = maxHp;
-        p.state.hp           = maxHp;
-        p.state.skinTone     = msg.skinTone     || 0;
-        p.state.hairStyle    = msg.hairStyle    || 0;
-        p.state.hairColor    = msg.hairColor    || 0;
+        p.state.charName      = msg.charName  || 'Player';
+        p.state.charClass     = msg.charClass || 'warrior';
+        p.state.maxHp         = maxHp;
+        p.state.hp            = maxHp;
+        p.state.skinTone      = msg.skinTone      || 0;
+        p.state.hairStyle     = msg.hairStyle     || 0;
+        p.state.hairColor     = msg.hairColor     || 0;
         p.state.weaponSubtype = msg.weaponSubtype || null;
+        // Restore progression from client (client loads from Supabase before connecting)
+        if (msg.level && msg.level >= 1) {
+          p.state.level       = msg.level;
+          p.state.xp          = msg.xp          || 0;
+          p.state.xpToNext    = xpToNext(msg.level);
+          p.state.statPoints  = msg.statPoints   || 0;
+          p.state.skillPoints = msg.skillPoints  || Math.max(1, msg.level);
+        }
         send(ws, {
           type: 'auth_ok', maxHp, charName: p.state.charName,
           level: p.state.level, xp: p.state.xp,
