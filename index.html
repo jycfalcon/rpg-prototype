@@ -1746,26 +1746,34 @@ function closeCtxMenu() {
   ctxItemIdx = -1;
 }
 
-async function ctxFavourite() {
+function ctxFavourite() {
   if (ctxItemIdx < 0) return;
   const item = inventory[ctxItemIdx];
   if (!item) return;
   item.favourited = !item.favourited;
-  // Persist to Supabase
-  await sbClient.from('items').update({ favourited: item.favourited }).eq('id', item.id);
   closeCtxMenu();
-  renderInventoryGrid();
+  renderInventoryGrid(); // immediate — star appears/disappears now
+  // Persist async, fire-and-forget
+  sbClient.from('items')
+    .update({ favourited: item.favourited })
+    .eq('id', item.id)
+    .then(({ error }) => { if (error) console.warn('fav persist:', error.message); });
 }
 
-async function ctxDiscard() {
+function ctxDiscard() {
   if (ctxItemIdx < 0) return;
   const item = inventory[ctxItemIdx];
   if (!item || item.favourited) return;
-  inventory.splice(ctxItemIdx, 1);
-  // Delete from Supabase
-  await sbClient.from('items').delete().eq('id', item.id);
+  const itemId = item.id;
+  const idx    = ctxItemIdx;
   closeCtxMenu();
-  renderInventoryGrid();
+  inventory.splice(idx, 1);
+  renderInventoryGrid(); // immediate
+  // Delete async, fire-and-forget
+  sbClient.from('items')
+    .delete()
+    .eq('id', itemId)
+    .then(({ error }) => { if (error) console.warn('discard persist:', error.message); });
 }
 
 // Close context menu on outside click
