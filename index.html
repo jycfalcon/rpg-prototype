@@ -642,7 +642,7 @@ function connectWS() {
       if (msg.type === 'slime_hit') {
         const s = slimes.find(s => s.id === msg.slimeId);
         if (s) { s.flash = 0.15; s.hp = msg.hp; }
-        addFloat(msg.x, msg.y-14, `-${P_ATK}`, '#ff8888', 19); burst(msg.x, msg.y, '#5bff8a', 5);
+        addFloat(msg.x, msg.y-14, `-${msg.dmg||P_ATK}`, '#ff8888', 19); burst(msg.x, msg.y, '#5bff8a', 5);
       }
       if (msg.type === 'slime_killed') {
         burst(msg.x, msg.y, msg.isKing?'#7b00d4':msg.isGiant?'#c0392b':'#27ae60', msg.isKing?30:msg.isGiant?20:14);
@@ -949,6 +949,9 @@ function update(dt) {
       hairColor: parseInt(localStorage.getItem('rpg_hair_color') || '0'),
       charClass: rpg_char_class,
       weaponSubtype: equipped.weapon?.subtype || null,
+      currentAtk:  _computeCurrentAtk(),
+      currentDef:  _computeCurrentDef(),
+      currentMdef: _computeCurrentMdef(),
     }));
   }
   for(const p of Object.values(others)){
@@ -1637,6 +1640,31 @@ function doMapTransition(callback){
 }
 
 // ── STORAGE ───────────────────────────────────────────────────────────────
+// Quick derived-stat helpers for state broadcast — server uses these for damage
+function _computeCurrentAtk() {
+  const base = getBaseStats();
+  const p    = pendingStats;
+  const str  = (base.strength || 0) + (p.strength || 0);
+  const wAtk = equipped.weapon?.stats?.atk || 0;
+  return wAtk + Math.floor(str * 0.5);
+}
+function _computeCurrentDef() {
+  const base = getBaseStats();
+  const p    = pendingStats;
+  const vit  = (base.vitality || 0) + (p.vitality || 0);
+  let gearDef = 0;
+  for (const item of Object.values(equipped)) gearDef += item?.stats?.def || 0;
+  return gearDef + Math.floor(vit * 1.5);
+}
+function _computeCurrentMdef() {
+  const base = getBaseStats();
+  const p    = pendingStats;
+  const int_ = (base.intelligence || 0) + (p.intelligence || 0);
+  let gearMdef = 0;
+  for (const item of Object.values(equipped)) gearMdef += item?.stats?.mdef || 0;
+  return gearMdef + Math.floor(int_ * 1.5);
+}
+
 function updateXPBar() {
   const t = document.getElementById('xp-text');
   const f = document.getElementById('xp-fill');

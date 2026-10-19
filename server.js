@@ -24,9 +24,9 @@ const TOWN_HEALER_X = 600, TOWN_HEALER_Y = 300;
 
 // Game constants
 const P_ATK = 3, ATK_RANGE = 50;
-const S_HP=20,  S_ATK=5,  S_SPEED=105, S_R=14;
-const G_HP=350, G_ATK=18, G_SPEED=62,  G_R=26;
-const K_HP=3000, K_SPEED=48, K_R=40;
+const S_HP=60,   S_ATK=5,  S_SPEED=105, S_R=14,  S_DEF=8,  S_MDEF=4;
+const G_HP=350,  G_ATK=18, G_SPEED=62,  G_R=26,  G_DEF=30, G_MDEF=15;
+const K_HP=3000, K_SPEED=48, K_R=40,              K_DEF=80, K_MDEF=50;
 const K_NORMAL_ATK=6, K_LUNGE_ATK=14, K_EQ_ATK=20;
 const K_NORMAL_ATK_RANGE=65, K_LUNGE_START_RANGE=200, K_EQ_TRIGGER_RANGE=220;
 const K_EQ_RADIUS=175, K_EQ_WINDUP=2.2;
@@ -105,6 +105,12 @@ function sendToPlayer(pid, msg) {
   if (p && p.ws.readyState === WebSocket.OPEN) p.ws.send(JSON.stringify(msg));
 }
 
+// ── DAMAGE FORMULAS ───────────────────────────────────────────────────────
+// physical_dmg = ATK × 100 / (100 + target_DEF)  — minimum 1
+// magic_dmg    = MATK × 100 / (100 + target_MDEF) — minimum 1
+function physDmg(atk, targetDef)  { return Math.max(1, Math.floor(atk  * 100 / (100 + (targetDef  || 0)))); }
+function magicDmg(matk, targetMdef){ return Math.max(1, Math.floor(matk * 100 / (100 + (targetMdef || 0)))); }
+
 // ── XP + LEVELLING ────────────────────────────────────────────────────────
 function awardXP(pid, amount) {
   const p = players.get(pid);
@@ -147,6 +153,8 @@ function mkSlime(isGiant, isKing, x, y) {
     hp:    isKing ? K_HP    : isGiant ? G_HP    : S_HP,
     maxHp: isKing ? K_HP    : isGiant ? G_HP    : S_HP,
     atk:   isKing ? K_NORMAL_ATK : isGiant ? G_ATK : S_ATK,
+    def:   isKing ? K_DEF  : isGiant ? G_DEF  : S_DEF,
+    mdef:  isKing ? K_MDEF : isGiant ? G_MDEF : S_MDEF,
     speed: isKing ? K_SPEED : isGiant ? G_SPEED : S_SPEED,
     isGiant, isKing,
     bodyCol:  isKing ? '#1a0038' : isGiant ? '#922b21' : '#27ae60',
@@ -289,7 +297,9 @@ function tick() {
               for (const p of alivePlayers('slime_map')) {
                 if (Math.hypot(p.x - s.x, p.y - s.y) <= s.r + 16) {
                   s.hasHit = true; s.flash = 0.15;
-                  sendToPlayer(p.id, { type: 'player_hit', slimeId: s.id, amount: s.isKing ? K_NORMAL_ATK : s.atk, stun: false });
+                  const _pDef = players.get(p.id)?.state?.currentDef || 0;
+                  const _dmg  = physDmg(s.isKing ? K_NORMAL_ATK : s.atk, _pDef);
+                  sendToPlayer(p.id, { type: 'player_hit', slimeId: s.id, amount: _dmg, stun: false });
                   s.atkPhase = 'recovery'; s.atkPhaseTimer = RECOVERY_DUR; s.hopArc = 0;
                   break;
                 }
@@ -328,7 +338,9 @@ function tick() {
               for (const p of alivePlayers('slime_map')) {
                 if (Math.hypot(p.x - s.x, p.y - s.y) <= s.r + 18) {
                   s.hasHit = true;
-                  sendToPlayer(p.id, { type: 'player_hit', slimeId: s.id, amount: s.isKing ? K_LUNGE_ATK : s.atk, stun: false });
+                  const _pDef2 = players.get(p.id)?.state?.currentDef || 0;
+                  const _dmg2  = physDmg(s.isKing ? K_LUNGE_ATK : s.atk, _pDef2);
+                  sendToPlayer(p.id, { type: 'player_hit', slimeId: s.id, amount: _dmg2, stun: false });
                   break;
                 }
               }
@@ -344,7 +356,9 @@ function tick() {
               broadcastToMap({ type: 'earthquake_hit', slimeId: s.id, x: s.x, y: s.y, radius: s.earthquakeRadius }, 'slime_map');
               for (const p of alivePlayers('slime_map')) {
                 if (Math.hypot(p.x - s.x, p.y - s.y) <= s.earthquakeRadius) {
-                  sendToPlayer(p.id, { type: 'player_hit', slimeId: s.id, amount: K_EQ_ATK, stun: STUN_DURATION });
+                  const _pMdef = players.get(p.id)?.state?.currentMdef || 0;
+              const _eqDmg = magicDmg(K_EQ_ATK, _pMdef);
+              sendToPlayer(p.id, { type: 'player_hit', slimeId: s.id, amount: _eqDmg, stun: STUN_DURATION });
                 }
               }
               s.lungeSkillCd = 0;
@@ -466,12 +480,15 @@ wss.on('connection', ws => {
         if (!s || !p.state) return;
         const dist = Math.hypot(p.state.x - s.x, p.state.y - s.y);
         if (dist > ATK_RANGE + s.r + 25) return;
-        s.hp -= P_ATK; s.flash = 0.15;
+        // Use player's computed ATK from state broadcast — physical attack vs slime DEF
+        const playerAtk = p.state.currentAtk || P_ATK;
+        const dmg = physDmg(playerAtk, s.def);
+        s.hp -= dmg; s.flash = 0.15;
         const ang = Math.atan2(s.y - p.state.y, s.x - p.state.x);
         const kb  = s.isKing ? 18 : 80;
         s.kbx = Math.cos(ang) * kb; s.kby = Math.sin(ang) * kb;
         s.state = 'aggro';
-        broadcastToMap({ type: 'slime_hit', slimeId: s.id, x: s.x, y: s.y, hp: s.hp, maxHp: s.maxHp }, 'slime_map');
+        broadcastToMap({ type: 'slime_hit', slimeId: s.id, x: s.x, y: s.y, hp: s.hp, maxHp: s.maxHp, dmg }, 'slime_map');
         if (s.hp <= 0) {
           s.alive = false;
           broadcastToMap({ type: 'slime_killed', slimeId: s.id, isKing: s.isKing, isGiant: s.isGiant, x: s.x, y: s.y }, 'slime_map');
