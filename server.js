@@ -479,7 +479,8 @@ wss.on('connection', ws => {
         const s = slimes.find(s => s.alive && s.id === msg.slimeId);
         if (!s || !p.state) return;
         const dist = Math.hypot(p.state.x - s.x, p.state.y - s.y);
-        if (dist > ATK_RANGE + s.r + 25) return;
+        const playerRange = p.state.currentRange || ATK_RANGE;
+        if (dist > playerRange + s.r + 25) return;
         // Use player's computed ATK from state broadcast — physical attack vs slime DEF
         const playerAtk = p.state.currentAtk || P_ATK;
         const dmg = physDmg(playerAtk, s.def);

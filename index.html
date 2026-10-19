@@ -28,7 +28,43 @@
   }
   #storage-panel {
     top: 50%; left: 50%; transform: translate(-50%, -50%);
-    width: 340px; z-index: 300; display: none;
+    width: 720px; max-width: 96vw; z-index: 300; display: none;
+  }
+  .storage-body { display:flex; gap:0; }
+  .storage-col {
+    flex:1; display:flex; flex-direction:column;
+    background:#0a0a14; min-height:340px;
+  }
+  .storage-col-left  { border-right:1px solid #2a2a50; }
+  .storage-col-header {
+    padding:8px 12px; font-size:9px; letter-spacing:0.18em;
+    color:#8080c0; border-bottom:1px solid #1e1e38;
+    display:flex; justify-content:space-between; align-items:center;
+  }
+  .storage-col-count { color:#5050a0; }
+  .storage-item-grid {
+    display:grid; grid-template-columns:repeat(5,1fr);
+    gap:4px; padding:8px; align-content:start; flex:1;
+  }
+  .storage-slot {
+    aspect-ratio:1; background:#0c0c20; border:1px solid #1e1e38;
+    display:flex; align-items:center; justify-content:center;
+    font-size:18px; cursor:pointer; position:relative;
+    transition:border-color 0.12s;
+  }
+  .storage-slot:hover { border-color:#4040a0; background:#14142a; }
+  .storage-slot.has-item { border-color:#2a2a55; }
+  .storage-slot.has-item:hover { border-color:#7070d0; }
+  .storage-slot.empty { cursor:default; }
+  .storage-hint {
+    font-size:9px; color:#303060; text-align:center;
+    padding:6px 8px; border-top:1px solid #1a1a30;
+  }
+  @media (max-width:768px) {
+    #storage-panel { width:96vw; }
+    .storage-body  { flex-direction:column; }
+    .storage-col-left { border-right:none; border-bottom:1px solid #2a2a50; }
+    .storage-item-grid { grid-template-columns:repeat(5,1fr); }
   }
   #map-fade {
     position: fixed; inset: 0; background: #000;
@@ -289,18 +325,27 @@
 <!-- STORAGE PANEL -->
 <div id="storage-panel" class="rpg-panel">
   <div class="rpg-panel-header">
-    <span>📦 STORAGE</span>
+    <span>📦 STORAGE — click an item to transfer</span>
     <span class="rpg-toggle" style="cursor:pointer" onclick="closeStoragePanel()">✕</span>
   </div>
-  <div class="rpg-panel-body" style="padding:10px;">
-    <div style="font-size:9px;color:#334;font-family:monospace;margin-bottom:8px;">
-      Shared between all your characters.
+  <div class="rpg-panel-body storage-body">
+    <!-- LEFT: character inventory -->
+    <div class="storage-col storage-col-left">
+      <div class="storage-col-header">
+        <span>INVENTORY</span>
+        <span class="storage-col-count" id="stor-inv-count">0 / 30</span>
+      </div>
+      <div class="storage-item-grid" id="stor-inv-grid"></div>
+      <div class="storage-hint">Your bag — items transfer to storage →</div>
     </div>
-    <div id="storage-grid">
-      <!-- 30 empty slots for now — items come in next session -->
-    </div>
-    <div style="font-size:9px;color:#223;font-family:monospace;padding-top:8px;text-align:center;">
-      Storage is empty. Items drop from monsters.
+    <!-- RIGHT: account storage -->
+    <div class="storage-col">
+      <div class="storage-col-header">
+        <span>STORAGE</span>
+        <span class="storage-col-count" id="stor-box-count">0 / 60</span>
+      </div>
+      <div class="storage-item-grid" id="stor-box-grid"></div>
+      <div class="storage-hint">Shared across all characters on this account</div>
     </div>
   </div>
 </div>
@@ -734,7 +779,7 @@ function triggerAttackOnTarget() {
   if(player.dead||player.atkCd>0||stunned)return;
   if(!targetSlime||!targetSlime.alive)return;
   const dx=targetSlime.x-player.x,dy=targetSlime.y-player.y;
-  if(Math.hypot(dx,dy)>ATK_RANGE+targetSlime.r)return;
+  if(Math.hypot(dx,dy)>getEffectiveRange()+targetSlime.r)return;
   const angle=Math.atan2(dy,dx);
   player.atkAngle=angle;player.atkTimer=ATK_DURATION;player.atkCd=ATK_CD;
   if(Math.abs(dx)>=Math.abs(dy))player.facing=dx>0?'right':'left';else player.facing=dy>0?'down':'up';
@@ -762,8 +807,18 @@ document.addEventListener('keydown', e => {
     inventoryOpen ? closeInventory() : openInventory();
   }
   if (k === 'escape') {
-    if (inventoryOpen) { closeInventory(); e.preventDefault(); }
-    else { closeWorldMap(); closeStoragePanel(); }
+    if (inventoryOpen) {
+      closeInventory(); e.preventDefault();
+    } else if (document.getElementById('worldmap-panel')?.style.display !== 'none') {
+      closeWorldMap();
+    } else if (document.getElementById('storage-panel')?.style.display !== 'none') {
+      closeStoragePanel();
+    } else {
+      // Nothing open — offer to return to character select
+      if (confirm('Return to character select?')) {
+        window.location.href = 'auth.html';
+      }
+    }
   }
 }, true); // capture: true = runs before element handlers
 
@@ -900,7 +955,8 @@ function update(dt) {
     // Auto-move (only in slime_map)
     if (autoMove&&targetSlime&&targetSlime.alive&&!rolling&&currentMap==='slime_map') {
       const dx=targetSlime.x-player.x,dy=targetSlime.y-player.y,dist=Math.hypot(dx,dy);
-      if(dist>ATK_RANGE+targetSlime.r-4){
+      const _effR = getEffectiveRange();
+      if(dist>_effR+targetSlime.r-4){
         player.x=clamp(player.x+(dx/dist)*P_SPEED*dt,12,mapW-12);
         player.y=clamp(player.y+(dy/dist)*P_SPEED*dt,12,mapH-12);
         if(Math.abs(dx)>=Math.abs(dy))player.facing=dx>0?'right':'left';else player.facing=dy>0?'down':'up';
@@ -949,9 +1005,10 @@ function update(dt) {
       hairColor: parseInt(localStorage.getItem('rpg_hair_color') || '0'),
       charClass: rpg_char_class,
       weaponSubtype: equipped.weapon?.subtype || null,
-      currentAtk:  _computeCurrentAtk(),
-      currentDef:  _computeCurrentDef(),
-      currentMdef: _computeCurrentMdef(),
+      currentAtk:   _computeCurrentAtk(),
+      currentDef:   _computeCurrentDef(),
+      currentMdef:  _computeCurrentMdef(),
+      currentRange: getEffectiveRange(),
     }));
   }
   for(const p of Object.values(others)){
@@ -1663,6 +1720,12 @@ function doMapTransition(callback){
 
 // ── STORAGE ───────────────────────────────────────────────────────────────
 // Quick derived-stat helpers for state broadcast — server uses these for damage
+// Effective attack range — reads weapon range stat if present, else melee default
+function getEffectiveRange() {
+  const r = equipped.weapon?.stats?.range || 0;
+  return r > 0 ? r * 10 : ATK_RANGE;
+}
+
 function _computeCurrentAtk() {
   const base = getBaseStats();
   const p    = pendingStats;
@@ -1694,11 +1757,143 @@ function updateXPBar() {
   if (f) f.style.width = Math.min(100, (playerXP / playerXPToNext) * 100).toFixed(1) + '%';
 }
 
-function openStoragePanel(){
+// ── STORAGE ───────────────────────────────────────────────────────────────
+let storageItems  = [];
+let storageLoaded = false;
+
+async function openStoragePanel() {
   document.getElementById('storage-panel').style.display = 'block';
+  if (!storageLoaded) await loadStorageItems();
+  renderStoragePanel();
 }
-function closeStoragePanel(){
+function closeStoragePanel() {
   document.getElementById('storage-panel').style.display = 'none';
+}
+
+async function loadStorageItems() {
+  try {
+    const { data, error } = await sbClient.from('storage').select('*').order('deposited_at', { ascending: true });
+    if (error) { console.warn('storage load:', error.message); return; }
+    storageItems  = data || [];
+    storageLoaded = true;
+  } catch(e) { console.warn('storage load failed:', e); }
+}
+
+function renderStoragePanel() {
+  const INV_MAX  = 30;
+  const STOR_MAX = 60;
+
+  // Left: character inventory
+  const invGrid = document.getElementById('stor-inv-grid');
+  if (invGrid) {
+    invGrid.innerHTML = '';
+    for (let i = 0; i < INV_MAX; i++) {
+      const item = inventory[i];
+      const slot = document.createElement('div');
+      if (item) {
+        slot.className = 'storage-slot has-item';
+        const star = item.favourited ? `<div style="position:absolute;top:1px;right:2px;font-size:9px;color:#f1c40f;pointer-events:none;">★</div>` : '';
+        slot.style.position = 'relative';
+        slot.innerHTML = `<span style="pointer-events:none;font-size:18px;">${itemIcon(item)}</span>${star}`;
+        slot.title = item.name;
+        slot.addEventListener('click',      () => moveToStorage(i));
+        slot.addEventListener('mouseenter', e  => showTooltip(e, item));
+        slot.addEventListener('mouseleave', hideTooltip);
+        slot.addEventListener('mousemove',  moveTooltip);
+      } else {
+        slot.className = 'storage-slot empty';
+      }
+      invGrid.appendChild(slot);
+    }
+    const c = document.getElementById('stor-inv-count');
+    if (c) c.textContent = `${inventory.length} / ${INV_MAX}`;
+  }
+
+  // Right: account storage bank
+  const boxGrid = document.getElementById('stor-box-grid');
+  if (boxGrid) {
+    boxGrid.innerHTML = '';
+    for (let i = 0; i < STOR_MAX; i++) {
+      const item = storageItems[i];
+      const slot = document.createElement('div');
+      if (item) {
+        slot.className = 'storage-slot has-item';
+        const star = item.favourited ? `<div style="position:absolute;top:1px;right:2px;font-size:9px;color:#f1c40f;pointer-events:none;">★</div>` : '';
+        slot.style.position = 'relative';
+        slot.innerHTML = `<span style="pointer-events:none;font-size:18px;">${itemIcon(item)}</span>${star}`;
+        slot.title = item.name;
+        slot.addEventListener('click',      () => moveFromStorage(i));
+        slot.addEventListener('mouseenter', e  => showTooltip(e, item));
+        slot.addEventListener('mouseleave', hideTooltip);
+        slot.addEventListener('mousemove',  moveTooltip);
+      } else {
+        slot.className = 'storage-slot empty';
+      }
+      boxGrid.appendChild(slot);
+    }
+    const c = document.getElementById('stor-box-count');
+    if (c) c.textContent = `${storageItems.length} / ${STOR_MAX}`;
+  }
+}
+
+// Inventory → Storage
+function moveToStorage(invIdx) {
+  const item = inventory[invIdx];
+  if (!item) return;
+  const charId = localStorage.getItem('rpg_char_id');
+  if (!charId) return;
+  // Optimistic
+  inventory.splice(invIdx, 1);
+  const localItem = { ...item, _pending: true };
+  storageItems.push(localItem);
+  renderStoragePanel();
+  if (inventoryOpen) renderInventoryGrid();
+  // Delete from items table
+  sbClient.from('items').delete().eq('id', item.id)
+    .then(({ error }) => { if (error) console.warn('stor→inv del:', error.message); });
+  // Insert to storage table
+  sbClient.from('storage').insert({
+    slot: item.slot, subtype: item.subtype, name: item.name,
+    stats: item.stats, favourited: item.favourited || false,
+  }).select().single()
+    .then(({ data, error }) => {
+      if (error) { console.warn('stor→box ins:', error.message); return; }
+      // Update local entry with real DB row
+      const idx = storageItems.findIndex(s => s._pending && s.name === item.name);
+      if (idx >= 0 && data) storageItems[idx] = data;
+    });
+}
+
+// Storage → Inventory
+function moveFromStorage(storIdx) {
+  const item = storageItems[storIdx];
+  if (!item) return;
+  if (inventory.length >= 30) {
+    addFloat(player.x, player.y - 50, 'INVENTORY FULL', '#e74c3c', 13);
+    return;
+  }
+  const charId = localStorage.getItem('rpg_char_id');
+  if (!charId) return;
+  // Optimistic
+  storageItems.splice(storIdx, 1);
+  const localItem = { ...item, _pending: true };
+  inventory.push(localItem);
+  renderStoragePanel();
+  if (inventoryOpen) renderInventoryGrid();
+  // Delete from storage table
+  sbClient.from('storage').delete().eq('id', item.id)
+    .then(({ error }) => { if (error) console.warn('box→inv del:', error.message); });
+  // Insert to items table
+  sbClient.from('items').insert({
+    owner_id: charId, slot: item.slot, subtype: item.subtype,
+    name: item.name, stats: item.stats, equipped: false,
+    favourited: item.favourited || false,
+  }).select().single()
+    .then(({ data, error }) => {
+      if (error) { console.warn('box→inv ins:', error.message); return; }
+      const idx = inventory.findIndex(i => i._pending && i.name === item.name);
+      if (idx >= 0 && data) inventory[idx] = data;
+    });
 }
 
 // ── INVENTORY LOADING ─────────────────────────────────────────────────────
