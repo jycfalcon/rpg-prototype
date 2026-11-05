@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Find the Pairs</title>
+<style>
+:root {
+  --bg: #f5f4f0;
+  --surface: #ffffff;
+  --surface2: #f0ede8;
+  --text: #1a1a18;
+  --text-soft: #6b6a65;
+  --border: rgba(0,0,0,0.12);
+  --radius: 16px;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #181816;
+    --surface: #2a2a28;
+    --surface2: #222220;
+    --text: #f0ede8;
+    --text-soft: #8a8a84;
+    --border: rgba(255,255,255,0.1);
+  }
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100%;
+  padding:
+    env(safe-area-inset-top, 0px)
+    env(safe-area-inset-right, 0px)
+    env(safe-area-inset-bottom, 0px)
+    env(safe-area-inset-left, 0px);
+}
+.wrap {
+  max-width: 440px;
+  margin: 0 auto;
+  padding: 28px 20px 40px;
+}
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 10px;
+}
+.title {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+.stats {
+  font-size: 17px;
+  color: var(--text-soft);
+  text-align: right;
+}
+.stats strong { color: var(--text); font-weight: 600; }
+.hint {
+  font-size: 17px;
+  color: var(--text-soft);
+  margin-bottom: 20px;
+}
+.progress {
+  height: 6px;
+  background: var(--border);
+  border-radius: 99px;
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+.progress-bar {
+  height: 100%;
+  background: #3B6D11;
+  border-radius: 99px;
+  transition: width 0.4s ease;
+  width: 0%;
+}
+.board {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.card {
+  aspect-ratio: 1;
+  border-radius: var(--radius);
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  font-size: 52px;
+  line-height: 1;
+  transition: transform 0.08s;
+  appearance: none;
+  outline: none;
+  font-family: inherit;
+}
+.card:not([disable
