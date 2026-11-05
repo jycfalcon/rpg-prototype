@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Find the Pairs</title>
+<style>
+:root {
+  --bg: #f5f4f0;
+  --surface: #ffffff;
+  --surface2: #f0ede8;
+  --text: #1a1a18;
+  --text-soft: #6b6a65;
+  --border: rgba(0,0,0,0.12);
+  --radius: 16px;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #181816;
+    --surface: #2a2a28;
+    --surface2: #222220;
+    --text: #f0ede8;
+    --text-soft: #8a8a84;
+    --border: rgba(255,255,255,0.1);
+  }
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100%;
+  padding:
+    env(safe-area-inset-top, 0px)
+    env(safe-area-inset-right, 0px)
+    env(safe-area-inset-bottom, 0px)
+    env(safe-area-inset-left, 0px);
+}
+.wrap {
+  max-width: 440px;
+  margin: 0 auto;
+  padding: 28px 20px 40px;
+}
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 10px;
+}
+.title {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+.stats {
+  font-size: 17px;
+  color: var(--text-soft);
+  text-align: right;
+}
+.stats strong { color: var(--text); font-weight: 600; }
+.hint {
+  font-size: 17px;
+  color: var(--text-soft);
+  margin-bottom: 20px;
+}
+.progress {
+  height: 6px;
+  background: var(--border);
+  border-radius: 99px;
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+.progress-bar {
+  height: 100%;
+  background: #3B6D11;
+  border-radius: 99px;
+  transition: width 0.4s ease;
+  width: 0%;
+}
+.board {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.card {
+  aspect-ratio: 1;
+  border-radius: var(--radius);
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  font-size: 52px;
+  line-height: 1;
+  transition: transform 0.08s;
+  appearance: none;
+  outline: none;
+  font-family: inherit;
+}
+.card:not([disabled]):active { transform: scale(0.93); }
+.card:focus-visible { outline: 3px solid #185FA5; outline-offset: 2px; }
+.card[disabled] { cursor: default; }
+.card-back {
+  font-size: 34px;
+  color: var(--text-soft);
+  font-weight: 300;
+  opacity: 0.45;
+}
+.win-wrap {
+  display: none;
+  background: var(--surface);
+  border-radius: 20px;
+  border: 1.5px solid var(--border);
+  padding: 36px 28px;
+  text-align: center;
+}
+.win-trophy { font-size: 56px; margin-bottom: 12px; line-height: 1; }
+.win-title {
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+.win-msg {
+  font-size: 20px;
+  color: var(--text-soft);
+  margin-bottom: 32px;
+  line-height: 1.5;
+}
+.btn-play {
+  background: #3B6D11;
+  color: #ffffff;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 20px;
+  font-weight: 600;
+  padding: 18px 44px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  min-width: 200px;
+}
+.btn-play:active { opacity: 0.85; transform: scale(0.97); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <div class="title">Find the Pairs</div>
+    <div class="stats">Moves: <strong id="moves">0</strong></div>
+  </div>
+  <p class="hint">Tap two cards to find matching pairs</p>
+  <div class="progress"><div class="progress-bar" id="progress-bar"></div></div>
+  <div class="board" id="board"></div>
+  <div class="win-wrap" id="win">
+    <div class="win-trophy">&#127881;</div>
+    <div class="win-title">Well done!</div>
+    <div class="win-msg" id="win-msg"></div>
+    <button class="btn-play" onclick="startGame()">Play again</button>
+  </div>
+</div>
+
+<script>
+const PAIRS = [
+  { ch: '\u2665', color: '#c0392b', bg: '#fdf0ee', darkBg: '#3a0d09', border: '#c0392b' },
+  { ch: '\u2660', color: '#185FA5', bg: '#eaf3fc', darkBg: '#091e38', border: '#185FA5' },
+  { ch: '\u2666', color: '#c46b00', bg: '#fff7ea', darkBg: '#3d2200', border: '#c46b00' },
+  { ch: '\u2663', color: '#3B6D11', bg: '#edf7e0', darkBg: '#112006', border: '#3B6D11' },
+  { ch: '\u2605', color: '#534AB7', bg: '#f0eeff', darkBg: '#1a163a', border: '#534AB7' },
+  { ch: '\u25CF', color: '#0F6E56', bg: '#e6f5f0', darkBg: '#05231a', border: '#0F6E56' },
+];
+
+const TOTAL = PAIRS.length;
+const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+let deck = [], flipped = [], matched = 0, moves = 0, busy = false;
+
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function startGame() {
+  flipped = []; matched = 0; moves = 0; busy = false;
+  document.getElementById('moves').textContent = '0';
+  document.getElementById('progress-bar').style.width = '0%';
+  document.getElementById('win').style.display = 'none';
+  document.getElementById('board').style.display = 'grid';
+
+  deck = shuffle(
+    PAIRS.flatMap((p, i) => [
+      { pairId: i, ...p, revealed: false, done: false },
+      { pairId: i, ...p, revealed: false, done: false }
+    ])
+  );
+  renderAll();
+}
+
+function renderAll() {
+  const board = document.getElementById('board');
+  board.innerHTML = '';
+  deck.forEach((_, i) => board.appendChild(makeEl(i)));
+}
+
+function makeEl(i) {
+  const c = deck[i];
+  const el = document.createElement('button');
+  el.className = 'card';
+  el.dataset.idx = i;
+
+  if (c.done || c.revealed) {
+    el.style.background = dark ? c.darkBg : c.bg;
+    el.style.borderColor = c.border;
+    if (c.done) {
+      el.style.borderWidth = '2.5px';
+      el.setAttribute('disabled', '');
+      el.setAttribute('aria-label', 'matched ' + c.ch);
+    } else {
+      el.setAttribute('aria-label', c.ch);
+    }
+    el.style.color = c.color;
+    el.textContent = c.ch;
+  } else {
+    el.setAttribute('aria-label', 'face-down card');
+    el.innerHTML = '<span class="card-back" aria-hidden="true">?</span>';
+  }
+
+  if (!c.done) el.addEventListener('click', () => flip(i));
+  return el;
+}
+
+function updateEl(i) {
+  const board = document.getElementById('board');
+  board.replaceChild(makeEl(i), board.children[i]);
+}
+
+function flip(i) {
+  if (busy || deck[i].revealed || deck[i].done) return;
+  if (flipped.length >= 2) return;
+  deck[i].revealed = true;
+  updateEl(i);
+  flipped.push(i);
+  if (flipped.length === 2) {
+    moves++;
+    document.getElementById('moves').textContent = moves;
+    check();
+  }
+}
+
+function check() {
+  const [a, b] = flipped;
+  if (deck[a].pairId === deck[b].pairId) {
+    busy = true;
+    setTimeout(() => {
+      deck[a].done = deck[b].done = true;
+      updateEl(a); updateEl(b);
+      matched++;
+      document.getElementById('progress-bar').style.width = Math.round(matched / TOTAL * 100) + '%';
+      flipped = [];
+      busy = false;
+      if (matched === TOTAL) setTimeout(win, 450);
+    }, 350);
+  } else {
+    busy = true;
+    setTimeout(() => {
+      deck[a].revealed = deck[b].revealed = false;
+      updateEl(a); updateEl(b);
+      flipped = [];
+      busy = false;
+    }, 1050);
+  }
+}
+
+function win() {
+  document.getElementById('board').style.display = 'none';
+  document.getElementById('win').style.display = 'block';
+  const rating = moves <= 9 ? 'Amazing memory!' : moves <= 13 ? 'Great job!' : 'You did it!';
+  document.getElementById('win-msg').textContent =
+    rating + '\nYou found all 6 pairs in ' + moves + ' move' + (moves === 1 ? '' : 's') + '.';
+}
+
+startGame();
+</script>
+</body>
+</html>
